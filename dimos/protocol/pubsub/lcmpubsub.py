@@ -56,7 +56,7 @@ class Topic:
 
 class LCMPubSubBase(PubSub[Topic, Any], LCMService):
     default_config = LCMConfig
-    lc: lcm.LCM
+    l: lcm.LCM
     _stop_event: threading.Event
     _thread: Optional[threading.Thread]
     _callbacks: dict[str, list[Callable[[Any], None]]]
