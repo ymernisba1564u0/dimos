@@ -84,7 +84,7 @@ except (ConnectionError, ImportError):
     print("LCM not available")
 
 try:
-    from dimos.protocol.pubsub.shared_memory_transport import SharedMemory
+    from dimos.protocol.pubsub.shmpubsub import SharedMemory
 
     @contextmanager
     def shared_memory_cpu_context():
