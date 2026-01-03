@@ -83,7 +83,7 @@ class InterpretMapSkill(SkillModule):
         if costmap is None:
             return "No map available."
 
-        grid_image = OccupancyGridImage.from_occupancygrid( # type: ignore[attr-defined]
+        grid_image = OccupancyGridImage.from_occupancygrid(  # type: ignore[attr-defined]
             occupancy_grid=costmap, size=(1024, 1024), flip_vertical=True, robot_pose=robot_pose
         )
 
