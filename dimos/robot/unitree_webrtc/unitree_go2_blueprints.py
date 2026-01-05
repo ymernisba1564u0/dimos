@@ -26,6 +26,7 @@ from dimos.agents2.spec import Provider
 from dimos.constants import DEFAULT_CAPACITY_COLOR_IMAGE
 from dimos.core.blueprints import autoconnect
 from dimos.core.transport import JpegLcmTransport, JpegShmTransport, LCMTransport, pSHMTransport
+from dimos.dashboard.module import Dashboard
 from dimos.msgs.geometry_msgs import PoseStamped
 from dimos.msgs.sensor_msgs import Image
 from dimos.navigation.bt_navigator.navigator import (
@@ -40,7 +41,6 @@ from dimos.navigation.local_planner.holonomic_local_planner import (
 )
 from dimos.perception.object_tracker import object_tracking
 from dimos.perception.spatial_perception import spatial_memory
-from dimos.robot.foxglove_bridge import foxglove_bridge
 from dimos.robot.unitree.connection.go2 import go2_connection
 from dimos.robot.unitree_webrtc.type.map import mapper
 from dimos.robot.unitree_webrtc.unitree_skill_container import unitree_skills
@@ -55,17 +55,20 @@ basic = (
         holonomic_local_planner(),
         behavior_tree_navigator(),
         wavefront_frontier_explorer(),
-        websocket_vis(),
-        foxglove_bridge(
-            shm_channels=[
-                "/go2/color_image#sensor_msgs.Image",
-            ]
+        Dashboard.blueprint(
+            auto_open=True,
+            terminal_commands={
+                "agent-spy": "htop",
+                "lcm-spy": "dimos lcmspy",
+                # "htop": "htop",
+            },
         ),
     )
     .global_config(n_dask_workers=4, robot_model="unitree_go2")
     .transports(
         # These are kept the same so that we don't have to change foxglove configs.
         # Although we probably should.
+        # NOTE: at least on MacOS, removing these (even with no foxglove/rerun) causes ram to spike to the point that the go2 --replay crashes with 16Gb of ram
         {
             ("color_image", Image): pSHMTransport(
                 "/go2/color_image", default_capacity=DEFAULT_CAPACITY_COLOR_IMAGE
@@ -94,11 +97,6 @@ standard_with_jpegshm = autoconnect(
         {
             ("color_image", Image): JpegShmTransport("/go2/color_image", quality=75),
         }
-    ),
-    foxglove_bridge(
-        jpeg_shm_channels=[
-            "/go2/color_image#sensor_msgs.Image",
-        ]
     ),
 )
 

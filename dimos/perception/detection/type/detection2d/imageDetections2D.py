@@ -14,7 +14,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Generic
+
+from typing_extensions import TypeVar
 
 from builtin_interfaces.msg import Time as ROSTime
 import cv2
@@ -39,27 +41,28 @@ from dimos.perception.detection.type.imageDetections import ImageDetections
 if TYPE_CHECKING:
     from ultralytics.engine.results import Results
 
+# TypeVar with default - Detection2DBBox is the default when no type param given
+T2D = TypeVar("T2D", bound=Detection2D, default=Detection2DBBox)
 
-class ImageDetections2D(ImageDetections[Detection2D]):
+
+class ImageDetections2D(ImageDetections[T2D], Generic[T2D]):
     @classmethod
     def from_ros_detection2d_array(  # type: ignore[no-untyped-def]
-        cls, image: Image, ros_detections: Detection2DArray, **kwargs
-    ) -> ImageDetections2D:
+        cls, image: Image, ros_detections: ROSDetection2DArray, **kwargs
+    ) -> ImageDetections2D[Detection2DBBox]:
         """Convert from ROS Detection2DArray message to ImageDetections2D object."""
-        detections: list[Detection2D] = []
+        detections: list[Detection2DBBox] = []
         for ros_det in ros_detections.detections:
             detection = Detection2DBBox.from_ros_detection2d(ros_det, image=image, **kwargs)
-            if detection.is_valid():  # type: ignore[attr-defined]
+            if detection.is_valid():
                 detections.append(detection)
 
-        return cls(image=image, detections=detections)
+        return ImageDetections2D(image=image, detections=detections)
 
     @classmethod
-    def from_ultralytics_result(
-        cls,
-        image: Image,
-        results: list[Results],
-    ) -> ImageDetections2D:
+    def from_ultralytics_result(  # type: ignore[no-untyped-def]
+        cls, image: Image, results: list[Results], **kwargs
+    ) -> ImageDetections2D[Detection2DBBox]:
         """Create ImageDetections2D from ultralytics Results.
 
         Dispatches to appropriate Detection2D subclass based on result type:
@@ -75,7 +78,7 @@ class ImageDetections2D(ImageDetections[Detection2D]):
             ImageDetections2D containing appropriate detection types
         """
 
-        detections: list[Detection2D] = []
+        detections: list[Detection2DBBox] = []
         for result in results:
             if result.boxes is None:
                 continue
