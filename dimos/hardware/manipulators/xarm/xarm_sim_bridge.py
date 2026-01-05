@@ -223,7 +223,7 @@ class XArmSimBridge:
     def connect(self) -> None:
         logger.info("XArmSimBridge: connect()")
         with self._lock:
-            self.connected = True
+            self._connected = True
             self._stop_event.clear()
             self._last_update_time = time.time()
 
@@ -245,7 +245,7 @@ class XArmSimBridge:
     def disconnect(self) -> int:
         logger.info("XArmSimBridge: disconnect()")
         with self._lock:
-            self.connected = False
+            self._connected = False
             self._stop_event.set()
 
         if self._sim_thread and self._sim_thread.is_alive():
