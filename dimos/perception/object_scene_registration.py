@@ -310,8 +310,8 @@ class ObjectSceneRegistrationModule(Module):
         """Background thread for async mesh generation requests."""
         while self._running:
             try:
-                object_id, color_image, depth_image, bbox, camera_transform = self._mesh_request_queue.get(
-                    timeout=1.0
+                object_id, color_image, depth_image, bbox, camera_transform = (
+                    self._mesh_request_queue.get(timeout=1.0)
                 )
             except Empty:
                 continue
@@ -700,13 +700,15 @@ class ObjectSceneRegistrationModule(Module):
                 status = self._mesh_request_states.get(obj.object_id)
                 if status in (None,):  # Only queue if never requested
                     self._mesh_request_states[obj.object_id] = "PENDING"
-                    self._mesh_request_queue.put((
-                        obj.object_id,
-                        color_image,
-                        depth_image,
-                        obj.bbox,
-                        camera_transform,  # Capture transform at request time
-                    ))
+                    self._mesh_request_queue.put(
+                        (
+                            obj.object_id,
+                            color_image,
+                            depth_image,
+                            obj.bbox,
+                            camera_transform,  # Capture transform at request time
+                        )
+                    )
 
         detections_3d = to_detection3d_array(objects)
         ros_detections_3d = detections_3d.to_ros_msg()
