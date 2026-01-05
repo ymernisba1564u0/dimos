@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pathlib import Path
 from queue import Empty, Queue
 import re
 import threading
-from pathlib import Path
 
 from cv_bridge import CvBridge
 import message_filters
@@ -32,11 +32,11 @@ from sensor_msgs.msg import (
 )
 from std_msgs.msg import Header as ROSHeader
 import tf2_ros
-from visualization_msgs.msg import Marker, MarkerArray
 from vision_msgs.msg import (
     Detection2DArray as ROSDetection2DArray,
     Detection3DArray as ROSDetection3DArray,
 )
+from visualization_msgs.msg import Marker, MarkerArray
 
 from dimos.core import Module, rpc
 from dimos.msgs.geometry_msgs import Quaternion, Transform, Vector3
@@ -73,7 +73,7 @@ class ObjectSceneRegistrationModule(Module):
     _tf_listener: tf2_ros.TransformListener | None = None
     _object_db: ObjectDB | None = None
     _mesh_pose_client: MeshPoseClient | None = None
-    
+
     # Async mesh generation worker
     _mesh_request_queue: Queue | None = None
     _mesh_request_states: dict[str, str] = {}
@@ -139,7 +139,7 @@ class ObjectSceneRegistrationModule(Module):
         self._latest_depth_image: Image | None = None
         self._latest_detections_2d: ImageDetections2D | None = None
         self._latest_objects: list[Object] = []
-        
+
         # Async mesh generation
         self._mesh_request_queue = Queue()
         self._mesh_request_states = {}
@@ -279,7 +279,7 @@ class ObjectSceneRegistrationModule(Module):
             name="ObjectSceneRegistrationProcessingThread",
         )
         self._processing_thread.start()
-        
+
         # Start mesh worker thread (async mesh generation)
         if self._mesh_pose_client is not None and self._auto_mesh_pose:
             self._mesh_worker_thread = threading.Thread(
@@ -315,7 +315,7 @@ class ObjectSceneRegistrationModule(Module):
                 )
             except Empty:
                 continue
-            
+
             try:
                 result = self._mesh_pose_client.get_mesh_and_pose(
                     bbox=bbox,
@@ -339,9 +339,10 @@ class ObjectSceneRegistrationModule(Module):
                         with self._object_db._lock:
                             obj_for_name = self._object_db.get_by_object_id(object_id)
                             if obj_for_name is not None and obj_for_name.name:
-                                safe_name = re.sub(
-                                    r"[^A-Za-z0-9._-]+", "_", obj_for_name.name
-                                ).strip("_") or safe_name
+                                safe_name = (
+                                    re.sub(r"[^A-Za-z0-9._-]+", "_", obj_for_name.name).strip("_")
+                                    or safe_name
+                                )
 
                     mesh_file = mesh_dir / f"{safe_name}_{object_id}.obj"
                     mesh_file.write_bytes(mesh_obj)
@@ -357,10 +358,10 @@ class ObjectSceneRegistrationModule(Module):
                             obj.mesh_dimensions = result.get("mesh_dimensions")
                             obj.fp_position = result.get("fp_position")
                             obj.fp_orientation = result.get("fp_orientation")
-                
+
                 self._mesh_request_states[object_id] = "DONE"
                 logger.info(f"Mesh complete for object_id={object_id}")
-                
+
             except Exception as e:
                 logger.warning(f"Mesh generation failed for object_id={object_id}: {e}")
                 self._mesh_request_states[object_id] = "FAILED"
@@ -372,7 +373,7 @@ class ObjectSceneRegistrationModule(Module):
 
         if self._processing_thread and self._processing_thread.is_alive():
             self._processing_thread.join(timeout=1.0)
-        
+
         if self._mesh_worker_thread and self._mesh_worker_thread.is_alive():
             self._mesh_worker_thread.join(timeout=2.0)
 
@@ -498,7 +499,7 @@ class ObjectSceneRegistrationModule(Module):
 
         prompt_str = (prompt or "").strip()
         if use_box_prompt is None:
-            use_box_prompt = (prompt_str == "")
+            use_box_prompt = prompt_str == ""
 
         if pipeline == "process":
             result = self._mesh_pose_client.get_mesh_and_pose(
@@ -695,16 +696,18 @@ class ObjectSceneRegistrationModule(Module):
                     continue
                 if obj.has_mesh:
                     continue  # Skip - already has mesh from previous detection
-                
+
                 status = self._mesh_request_states.get(obj.object_id)
                 if status in (None,):  # Only queue if never requested
                     self._mesh_request_states[obj.object_id] = "PENDING"
-                    self._mesh_request_queue.put((
-                        obj.object_id,
-                        color_image,
-                        depth_image,
-                        obj.bbox,
-                    ))
+                    self._mesh_request_queue.put(
+                        (
+                            obj.object_id,
+                            color_image,
+                            depth_image,
+                            obj.bbox,
+                        )
+                    )
 
         detections_3d = to_detection3d_array(objects)
         ros_detections_3d = detections_3d.to_ros_msg()

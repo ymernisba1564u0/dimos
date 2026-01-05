@@ -83,10 +83,10 @@ class ObjectDB:
 
     def get_by_track_id(self, track_id: int) -> Object | None:
         """Get object by track_id (searches both pending and permanent objects).
-        
+
         Args:
             track_id: The track_id to search for
-            
+
         Returns:
             Object instance or None if not found
         """
@@ -243,10 +243,7 @@ class ObjectDB:
             o
             for o in all_objects
             if o.center is not None
-            and (
-                (not self._require_same_name_for_distance_match)
-                or (o.name == obj.name)
-            )
+            and ((not self._require_same_name_for_distance_match) or (o.name == obj.name))
             and obj.center.distance(o.center) < self._distance_threshold
         ]
 

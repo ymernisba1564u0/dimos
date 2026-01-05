@@ -415,7 +415,7 @@ class MeshPoseClient:
         """Parse service response into a simple dict."""
         mesh_obj = None
         mesh_id = data.get("mesh_id")
-        
+
         if mesh_id:
             # Download mesh from artifact endpoint
             try:
@@ -428,7 +428,9 @@ class MeshPoseClient:
                     mesh_obj = mesh_resp.content
                     logger.info(f"Downloaded mesh {mesh_id}: {len(mesh_obj)} bytes")
                 else:
-                    logger.warning(f"Failed to download mesh {mesh_id}: HTTP {mesh_resp.status_code}")
+                    logger.warning(
+                        f"Failed to download mesh {mesh_id}: HTTP {mesh_resp.status_code}"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to download mesh {mesh_id}: {e}")
 
@@ -478,7 +480,7 @@ class MeshPoseClient:
         camera_info: CameraInfo,
     ) -> dict:
         """Build the JSON payload for the service request.
-        
+
         Default: use bbox prompting, do NOT forward detector labels.
         """
         return self._build_payload_from_raw(

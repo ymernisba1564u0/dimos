@@ -176,15 +176,15 @@ def main() -> None:
                 try:
                     target = _parse_target(parts[1])
                     prompt = " ".join(parts[2:]) if len(parts) > 2 else None
-                    
-                    print(f"Running full pipeline (mesh+pose)...")
+
+                    print("Running full pipeline (mesh+pose)...")
                     if prompt:
                         print(f"  Using text prompt: '{prompt}'")
                     else:
-                        print(f"  Using box-only prompting (no label)")
-                    
+                        print("  Using box-only prompting (no label)")
+
                     res = osr.run_hosted_pipeline("process", prompt=prompt, **target)
-                    
+
                     print("\nResult:")
                     print(f"  Mesh: {res.get('mesh_obj_bytes', 0)} bytes")
                     if res.get("mesh_dimensions"):
@@ -195,7 +195,9 @@ def main() -> None:
                         print(f"  Position: [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}]")
                     if res.get("fp_orientation"):
                         ori = res["fp_orientation"]
-                        print(f"  Orientation (xyzw): [{ori[0]:.3f}, {ori[1]:.3f}, {ori[2]:.3f}, {ori[3]:.3f}]")
+                        print(
+                            f"  Orientation (xyzw): [{ori[0]:.3f}, {ori[1]:.3f}, {ori[2]:.3f}, {ori[3]:.3f}]"
+                        )
                     print()
                 except Exception as e:
                     print(f"Error: {e}")
@@ -205,15 +207,15 @@ def main() -> None:
                 try:
                     target = _parse_target(parts[1])
                     prompt = " ".join(parts[2:]) if len(parts) > 2 else None
-                    
-                    print(f"Running fast pipeline (grasps only)...")
+
+                    print("Running fast pipeline (grasps only)...")
                     if prompt:
                         print(f"  Using text prompt: '{prompt}'")
                     else:
-                        print(f"  Using box-only prompting (no label)")
-                    
+                        print("  Using box-only prompting (no label)")
+
                     res = osr.run_hosted_pipeline("grasp", prompt=prompt, **target)
-                    
+
                     grasps = res.get("grasps", [])
                     print(f"\nGenerated {len(grasps)} grasp(s)")
                     if grasps:
@@ -242,4 +244,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
