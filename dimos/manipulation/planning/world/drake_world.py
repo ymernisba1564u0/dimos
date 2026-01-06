@@ -681,6 +681,32 @@ class DrakeWorld:
                             except Exception as e:
                                 logger.warning(f"Could not filter {name1}<->{name2}: {e}")
 
+            # Add user-specified collision exclusions from config
+            # Useful for parallel linkage mechanisms (grippers) where non-adjacent
+            # links may legitimately overlap due to mimic joints
+            exclusion_pairs = robot_data.config.collision_exclusion_pairs
+            if exclusion_pairs:
+                body_name_map = {body.name(): body for body in bodies}
+                for name1, name2 in exclusion_pairs:
+                    if name1 in body_name_map and name2 in body_name_map:
+                        body1 = body_name_map[name1]
+                        body2 = body_name_map[name2]
+                        try:
+                            geoms1 = self._plant.GetCollisionGeometriesForBody(body1)
+                            geoms2 = self._plant.GetCollisionGeometriesForBody(body2)
+                            if geoms1 and geoms2:
+                                scene_graph.collision_filter_manager().Apply(
+                                    CollisionFilterDeclaration().ExcludeBetween(
+                                        GeometrySet(geoms1), GeometrySet(geoms2)
+                                    )
+                                )
+                                logger.debug(f"Excluded collision pair: {name1}<->{name2}")
+                        except Exception as e:
+                            logger.warning(f"Could not filter pair {name1}<->{name2}: {e}")
+                    else:
+                        missing = [n for n in (name1, name2) if n not in body_name_map]
+                        logger.warning(f"Collision exclusion: links not found: {missing}")
+
         logger.info("Collision filters applied")
 
     # ============= Context Management =============

@@ -104,6 +104,8 @@ class ManipulationModuleConfig(ModuleConfig):
     # For xacro files that use $(find package_name)
     package_paths: dict[str, str] = field(default_factory=dict)
     xacro_args: dict[str, str] = field(default_factory=dict)
+    # Collision exclusion pairs for parallel linkage mechanisms (e.g., grippers)
+    collision_exclusion_pairs: list[tuple[str, str]] = field(default_factory=list)
 
 
 class ManipulationModule(Module):
@@ -207,6 +209,7 @@ class ManipulationModule(Module):
             package_paths=config.package_paths,
             xacro_args=config.xacro_args,
             auto_convert_meshes=True,
+            collision_exclusion_pairs=config.collision_exclusion_pairs,
         )
 
         # Create world monitor

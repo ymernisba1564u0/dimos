@@ -125,6 +125,9 @@ class RobotModelConfig:
         velocity_limits: Joint velocity limits (rad/s)
         auto_convert_meshes: Auto-convert DAE/STL meshes to OBJ for Drake
         xacro_args: Arguments to pass to xacro processor (for .xacro files)
+        collision_exclusion_pairs: List of (link1, link2) pairs to exclude from collision.
+            Useful for parallel linkage mechanisms like grippers where non-adjacent
+            links may legitimately overlap (e.g., mimic joints).
     """
 
     name: str
@@ -139,6 +142,7 @@ class RobotModelConfig:
     velocity_limits: NDArray[np.float64] | None = None
     auto_convert_meshes: bool = False
     xacro_args: dict[str, str] = field(default_factory=dict)
+    collision_exclusion_pairs: list[tuple[str, str]] = field(default_factory=list)
 
 
 @dataclass

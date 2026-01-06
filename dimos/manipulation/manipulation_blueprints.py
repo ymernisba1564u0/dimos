@@ -66,6 +66,20 @@ def _get_xarm_package_paths() -> dict[str, str]:
     return {"xarm_description": str(base / "xarm/xarm_description")}
 
 
+# XArm gripper collision exclusions (parallel linkage mechanism)
+# These link pairs legitimately overlap due to mimic joints
+XARM_GRIPPER_COLLISION_EXCLUSIONS: list[tuple[str, str]] = [
+    ("right_inner_knuckle", "right_outer_knuckle"),
+    ("right_inner_knuckle", "right_finger"),
+    ("left_inner_knuckle", "left_outer_knuckle"),
+    ("left_inner_knuckle", "left_finger"),
+    # Finger-to-finger when gripper is closed
+    ("left_finger", "right_finger"),
+    ("left_outer_knuckle", "right_outer_knuckle"),
+    ("left_inner_knuckle", "right_inner_knuckle"),
+]
+
+
 # Path to piper URDF
 def _get_piper_urdf_path() -> str:
     """Get path to piper URDF."""
@@ -95,7 +109,7 @@ def _get_piper_package_paths() -> dict[str, str]:
 
 xarm6_manipulation = autoconnect(
     xarm_driver(
-        ip="192.168.1.235",
+        ip="192.168.1.210",
         dof=6,
         has_gripper=False,
         has_force_torque=False,
@@ -115,6 +129,7 @@ xarm6_manipulation = autoconnect(
         enable_viz=True,
         package_paths=_get_xarm_package_paths(),
         xacro_args={"dof": "6", "limited": "true", "add_gripper": "true"},
+        collision_exclusion_pairs=XARM_GRIPPER_COLLISION_EXCLUSIONS,
     ),
     joint_trajectory_controller(
         control_frequency=100.0,
@@ -196,6 +211,7 @@ xarm6_planner_only = manipulation_module(
     enable_viz=True,
     package_paths=_get_xarm_package_paths(),
     xacro_args={"dof": "6", "limited": "true", "add_gripper": "true"},
+    collision_exclusion_pairs=XARM_GRIPPER_COLLISION_EXCLUSIONS,
 ).transports(
     {
         # Subscribe to joint state from driver
@@ -261,6 +277,8 @@ piper_manipulation = autoconnect(
 
 
 __all__ = [
+    # Collision exclusion constants for custom configurations
+    "XARM_GRIPPER_COLLISION_EXCLUSIONS",
     "piper_manipulation",
     "xarm6_manipulation",
     "xarm6_planner_only",
