@@ -53,7 +53,7 @@ class JointMsgs:
 
     joint_state: JointState = None  # type: ignore
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.joint_state is None:
             self.joint_state = JointState()
 
@@ -72,7 +72,7 @@ class ArmStatusMsg:
 
     arm_status: ArmStatus = None  # type: ignore
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.arm_status is None:
             self.arm_status = ArmStatus()
 

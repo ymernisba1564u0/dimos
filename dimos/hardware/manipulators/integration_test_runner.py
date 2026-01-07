@@ -43,14 +43,23 @@ Usage:
     python -m dimos.hardware.manipulators.integration_test_runner --hardware --skip-motion
 """
 
+from __future__ import annotations
+
 import argparse
 import math
 import sys
 import time
+from typing import TYPE_CHECKING, Any
 
 from dimos.core.transport import LCMTransport
 from dimos.hardware.manipulators.base.sdk_interface import BaseManipulatorSDK, ManipulatorInfo
 from dimos.msgs.sensor_msgs import JointState, RobotState
+
+if TYPE_CHECKING:
+    from dimos.hardware.manipulators.base.driver import BaseManipulatorDriver
+
+# Type alias for drivers - the actual type depends on components, so we use Any for flexibility
+DriverType = Any
 
 
 class MockSDK(BaseManipulatorSDK):
@@ -69,7 +78,7 @@ class MockSDK(BaseManipulatorSDK):
         self._state = 0
         self._error_code = 0
 
-    def connect(self, config: dict) -> bool:
+    def connect(self, config: dict[str, object]) -> bool:
         self._connected = True
         return True
 
@@ -124,7 +133,7 @@ class MockSDK(BaseManipulatorSDK):
     def are_servos_enabled(self) -> bool:
         return self._servos_enabled
 
-    def get_robot_state(self) -> dict:
+    def get_robot_state(self) -> dict[str, object]:
         return {
             "state": self._state,
             "mode": self._mode,
@@ -173,7 +182,7 @@ class MockSDK(BaseManipulatorSDK):
 # =============================================================================
 
 
-def test_connection(driver, hardware: bool) -> bool:
+def test_connection(driver: DriverType, hardware: bool) -> bool:
     """Test that driver connects to hardware/mock."""
     print("Testing connection...")
 
@@ -190,7 +199,7 @@ def test_connection(driver, hardware: bool) -> bool:
     return True
 
 
-def test_read_joint_state(driver, hardware: bool) -> bool:
+def test_read_joint_state(driver: DriverType, hardware: bool) -> bool:
     """Test reading joint state."""
     print("Testing read joint state...")
 
@@ -215,7 +224,7 @@ def test_read_joint_state(driver, hardware: bool) -> bool:
     return True
 
 
-def test_get_robot_state(driver, hardware: bool) -> bool:
+def test_get_robot_state(driver: DriverType, hardware: bool) -> bool:
     """Test getting robot state."""
     print("Testing robot state...")
 
@@ -232,7 +241,7 @@ def test_get_robot_state(driver, hardware: bool) -> bool:
     return True
 
 
-def test_servo_enable_disable(driver, hardware: bool) -> bool:
+def test_servo_enable_disable(driver: DriverType, hardware: bool) -> bool:
     """Test enabling and disabling servos."""
     print("Testing servo enable/disable...")
 
@@ -269,7 +278,7 @@ def test_servo_enable_disable(driver, hardware: bool) -> bool:
     return True
 
 
-def test_joint_limits(driver, hardware: bool) -> bool:
+def test_joint_limits(driver: DriverType, hardware: bool) -> bool:
     """Test getting joint limits."""
     print("Testing joint limits...")
 
@@ -292,7 +301,7 @@ def test_joint_limits(driver, hardware: bool) -> bool:
     return True
 
 
-def test_stop_motion(driver, hardware: bool) -> bool:
+def test_stop_motion(driver: DriverType, hardware: bool) -> bool:
     """Test stop motion command."""
     print("Testing stop motion...")
 
@@ -313,7 +322,7 @@ def test_stop_motion(driver, hardware: bool) -> bool:
     return True
 
 
-def test_small_motion(driver, hardware: bool) -> bool:
+def test_small_motion(driver: DriverType, hardware: bool) -> bool:
     """Test a small joint motion (5 degrees on joint 1).
 
     WARNING: With --hardware, this MOVES the real robot!
@@ -381,7 +390,7 @@ def test_small_motion(driver, hardware: bool) -> bool:
 # =============================================================================
 
 
-def create_driver(arm: str, hardware: bool, config: dict):
+def create_driver(arm: str, hardware: bool, config: dict[str, object]) -> BaseManipulatorDriver:
     """Create driver for the specified arm type.
 
     Args:
@@ -408,7 +417,9 @@ def create_driver(arm: str, hardware: bool, config: dict):
                 StandardStatusComponent,
             )
 
-            mock_sdk = MockSDK(dof=config.get("dof", 6), vendor="UFactory", model="xArm")
+            dof_val = config.get("dof", 6)
+            dof_int = dof_val if isinstance(dof_val, int) else 6
+            mock_sdk = MockSDK(dof=dof_int, vendor="UFactory", model="xArm")
             components = [
                 StandardMotionComponent(),
                 StandardServoComponent(),
@@ -426,7 +437,7 @@ def create_driver(arm: str, hardware: bool, config: dict):
             return PiperDriver(config=config)
         else:
             # Create driver with mock SDK
-            driver = PiperDriver.__new__(PiperDriver)
+            piper_driver = PiperDriver.__new__(PiperDriver)
             from dimos.hardware.manipulators.base import (
                 BaseManipulatorDriver,
                 StandardMotionComponent,
@@ -441,9 +452,9 @@ def create_driver(arm: str, hardware: bool, config: dict):
                 StandardStatusComponent(),
             ]
             BaseManipulatorDriver.__init__(
-                driver, sdk=mock_sdk, components=components, config=config, name="PiperDriver"
+                piper_driver, sdk=mock_sdk, components=components, config=config, name="PiperDriver"
             )
-            return driver
+            return piper_driver
 
     else:
         raise ValueError(f"Unknown arm type: {arm}. Supported: xarm, piper")
@@ -454,7 +465,7 @@ def create_driver(arm: str, hardware: bool, config: dict):
 # =============================================================================
 
 
-def configure_transports(driver, arm: str):
+def configure_transports(driver: DriverType, arm: str) -> None:
     """Configure LCM transports for the driver (like production does).
 
     Args:
@@ -462,8 +473,12 @@ def configure_transports(driver, arm: str):
         arm: Arm type for topic naming
     """
     # Create LCM transports for state publishing
-    joint_state_transport = LCMTransport(f"/test/{arm}/joint_state", JointState)
-    robot_state_transport = LCMTransport(f"/test/{arm}/robot_state", RobotState)
+    joint_state_transport: LCMTransport[JointState] = LCMTransport(
+        f"/test/{arm}/joint_state", JointState
+    )
+    robot_state_transport: LCMTransport[RobotState] = LCMTransport(
+        f"/test/{arm}/robot_state", RobotState
+    )
 
     # Set transports on driver's Out streams
     if driver.joint_state:
@@ -475,10 +490,10 @@ def configure_transports(driver, arm: str):
 def run_tests(
     arm: str,
     hardware: bool,
-    config: dict,
+    config: dict[str, object],
     test_name: str | None = None,
     skip_motion: bool = False,
-):
+) -> bool:
     """Run integration tests."""
     mode = "HARDWARE" if hardware else "MOCK"
     print("=" * 60)
@@ -570,7 +585,7 @@ def run_tests(
     return passed == total
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generic manipulator driver integration tests",
         formatter_class=argparse.RawDescriptionHelpFormatter,

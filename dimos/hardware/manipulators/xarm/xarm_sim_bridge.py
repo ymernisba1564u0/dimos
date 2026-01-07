@@ -71,7 +71,7 @@ class XArmSimBridge(MujocoSimBridgeBase):
         # --- Additional threading for reports (XArm-specific) --- #
         self._report_thread: threading.Thread | None = None
         self._connect_callback: Callable[[bool, bool], None] | None = None
-        self._report_callback: Callable[[dict], None] | None = None
+        self._report_callback: Callable[[dict[str, object]], None] | None = None
 
         # --- Velocity control support --- #
         self._joint_velocity_targets = [0.0] * self._num_joints
@@ -206,14 +206,14 @@ class XArmSimBridge(MujocoSimBridgeBase):
             return list(self._ft_raw_force)
 
     @property
-    def core(self):
+    def core(self) -> _CoreProxy:
         """Core API proxy for advanced methods."""
         return self._core
 
     class _CoreProxy:
         """Proxy object for core API methods."""
 
-        def __init__(self, bridge):
+        def __init__(self, bridge: XArmSimBridge) -> None:
             self._bridge = bridge
 
         def servo_get_dbmsg(self, dbg_msg: list[int]) -> None:
@@ -237,7 +237,7 @@ class XArmSimBridge(MujocoSimBridgeBase):
         if self.connected:
             callback(True, True)
 
-    def register_report_callback(self, callback: Callable[[dict], None]) -> None:
+    def register_report_callback(self, callback: Callable[[dict[str, object]], None]) -> None:
         self._report_callback = callback
 
     # ------------------------------------------------------------------ #
@@ -261,7 +261,7 @@ class XArmSimBridge(MujocoSimBridgeBase):
             )
             self._report_thread.start()
 
-    def disconnect(self) -> int:
+    def disconnect(self) -> None:
         logger.info("XArmSimBridge: disconnect()")
 
         # Stop report thread first
@@ -273,8 +273,6 @@ class XArmSimBridge(MujocoSimBridgeBase):
 
         if self._connect_callback:
             self._connect_callback(False, True)
-
-        return 0
 
     # ------------------------------------------------------------------ #
     # Core state helpers
@@ -393,7 +391,7 @@ class XArmSimBridge(MujocoSimBridgeBase):
             positions = [math.degrees(p) for p in positions]
         return (0, positions)
 
-    def get_joint_states(self, is_radian=None) -> tuple[int, list[list[float]]]:
+    def get_joint_states(self, is_radian: bool | None = None) -> tuple[int, list[list[float]]]:
         with self._lock:
             positions = list(self._joint_positions)
             velocities = list(self._joint_velocities)
@@ -428,7 +426,7 @@ class XArmSimBridge(MujocoSimBridgeBase):
         self,
         angles: Sequence[float],
         is_radian: bool | None = None,
-        **kwargs,
+        **kwargs: object,
     ) -> int:
         """Set target joint angles for position control.
 
@@ -455,7 +453,7 @@ class XArmSimBridge(MujocoSimBridgeBase):
         speeds: Sequence[float],
         is_radian: bool | None = None,
         duration: float | None = None,
-        **kwargs,
+        **kwargs: object,
     ) -> int:
         """
         Set target joint velocities for velocity control.
@@ -511,7 +509,9 @@ class XArmSimBridge(MujocoSimBridgeBase):
         angle = magnitude if is_radian else math.degrees(magnitude)
         return (0, [0.0, 0.0, 1.0, angle])
 
-    def set_position(self, *pose, is_radian: bool = True, wait: bool = False, **kwargs):
+    def set_position(
+        self, *pose: float, is_radian: bool = True, wait: bool = False, **kwargs: object
+    ) -> int:
         """Set target Cartesian position (stub - would need IK to convert to joint angles)."""
         with self._lock:
             vals = list(pose)
@@ -520,7 +520,7 @@ class XArmSimBridge(MujocoSimBridgeBase):
             self._cmdnum += 1
         return 0
 
-    def move_gohome(self, wait: bool = False, is_radian: bool = True):
+    def move_gohome(self, wait: bool = False, is_radian: bool = True) -> int:
         home = [0.0] * self._num_joints
         return self.set_servo_angle_j(home, is_radian=is_radian)
 
@@ -558,16 +558,16 @@ class XArmSimBridge(MujocoSimBridgeBase):
     # ------------------------------------------------------------------ #
     # Generic stubs for remaining SDK surface
     # ------------------------------------------------------------------ #
-    def _simple_ok(self, *args, **kwargs) -> int:
+    def _simple_ok(self, *args: object, **kwargs: object) -> int:
         return 0
 
-    def _tuple_ok_none(self, *args, **kwargs) -> tuple[int, None]:
+    def _tuple_ok_none(self, *args: object, **kwargs: object) -> tuple[int, None]:
         return (0, None)
 
-    def _tuple_ok_zero(self, *args, **kwargs) -> tuple[int, int]:
+    def _tuple_ok_zero(self, *args: object, **kwargs: object) -> tuple[int, int]:
         return (0, 0)
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Callable[..., int | tuple[int, int | None]]:
         """
         Provide best-effort implementations for the large surface of the
         hardware SDK that the simulation may not support yet.

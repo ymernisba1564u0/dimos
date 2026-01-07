@@ -57,8 +57,8 @@ class CallRecord:
     """Record of a method call for verification."""
 
     method: str
-    args: tuple = field(default_factory=tuple)
-    kwargs: dict = field(default_factory=dict)
+    args: tuple[object, ...] = field(default_factory=tuple)
+    kwargs: dict[str, object] = field(default_factory=dict)
 
 
 class MockSDK(BaseManipulatorSDK):
@@ -139,7 +139,7 @@ class MockSDK(BaseManipulatorSDK):
         self.emergency_stop_called = False
         self.clear_errors_called = False
 
-    def _record_call(self, method: str, *args, **kwargs):
+    def _record_call(self, method: str, *args: object, **kwargs: object) -> None:
         """Record a method call."""
         self._calls.append(CallRecord(method=method, args=args, kwargs=kwargs))
 
@@ -160,7 +160,7 @@ class MockSDK(BaseManipulatorSDK):
         calls = self.get_calls(method)
         return calls[-1] if calls else None
 
-    def reset_calls(self):
+    def reset_calls(self) -> None:
         """Reset call tracking."""
         self._calls.clear()
         self.connect_called = False
@@ -175,21 +175,21 @@ class MockSDK(BaseManipulatorSDK):
 
     # ============= State Manipulation (for test setup) =============
 
-    def set_positions(self, positions: list[float]):
+    def set_positions(self, positions: list[float]) -> None:
         """Set internal positions (test helper)."""
         self._positions = list(positions)
 
-    def set_error(self, code: int, message: str = ""):
+    def set_error(self, code: int, message: str = "") -> None:
         """Inject an error state (test helper)."""
         self._error_code = code
 
-    def set_enabled(self, enabled: bool):
+    def set_enabled(self, enabled: bool) -> None:
         """Set servo enabled state (test helper)."""
         self._servos_enabled = enabled
 
     # ============= BaseManipulatorSDK Implementation =============
 
-    def connect(self, config: dict) -> bool:
+    def connect(self, config: dict[str, object]) -> bool:
         self._record_call("connect", config)
         self.connect_called = True
 
@@ -290,7 +290,7 @@ class MockSDK(BaseManipulatorSDK):
         self._record_call("are_servos_enabled")
         return self._servos_enabled
 
-    def get_robot_state(self) -> dict:
+    def get_robot_state(self) -> dict[str, object]:
         self._record_call("get_robot_state")
         return {
             "state": self._state,
