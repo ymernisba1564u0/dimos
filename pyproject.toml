@@ -245,6 +245,7 @@ sim = [
     # Simulation
     "mujoco>=3.3.4",
     "drake",
+    "xacro",
     "playground>=0.0.5",
 ]
 
@@ -310,7 +311,7 @@ module = [
     "sensor_msgs.*",
     "nav_msgs.*",
     "tf2_msgs.*",
-    "mujoco",
+    "mujoco.*",
     "mujoco_playground.*",
     "etils",
     "xarm.*",
