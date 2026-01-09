@@ -274,7 +274,6 @@ def preview_waypoints(waypoints: list[list[float]], joint_names: list[str]) -> N
         print("No waypoints")
         return
 
-    len(joint_names)
     print(f"\nWaypoints ({len(waypoints)}):")
     print("-" * 70)
 
@@ -292,7 +291,6 @@ def preview_waypoints(waypoints: list[list[float]], joint_names: list[str]) -> N
 
 def preview_trajectory(trajectory: JointTrajectory, joint_names: list[str]) -> None:
     """Show generated trajectory preview."""
-    len(joint_names)
     headers = [j.split("_")[-1][:6] for j in joint_names]
     header_str = " ".join(f"{h:>7}" for h in headers)
 

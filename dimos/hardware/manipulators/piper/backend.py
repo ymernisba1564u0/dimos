@@ -358,11 +358,15 @@ class PiperBackend:
                 # Enable with retries
                 attempts = 0
                 max_attempts = 100
-                while not self._sdk.EnablePiper() and attempts < max_attempts:
+                success = False
+                while attempts < max_attempts:
+                    if self._sdk.EnablePiper():
+                        success = True
+                        break
                     time.sleep(0.01)
                     attempts += 1
 
-                if attempts < max_attempts:
+                if success:
                     self._enabled = True
                     # Set control mode
                     self._sdk.MotionCtrl_2(

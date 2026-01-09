@@ -243,11 +243,11 @@ class TickLoop:
         Returns:
             Tuple of:
             - joint_commands: {joint_name: (value, mode, task_name)}
-            - preemptions: {task_name: set of preempted joints}
+            - preemptions: {preempted_task: {joint: winning_task}}
         """
         # Track winner per joint: joint -> (priority, value, mode, task_name)
         winners: dict[str, tuple[int, float, ControlMode, str]] = {}
-        preemptions: dict[str, set[str]] = {}
+        preemptions: dict[str, dict[str, str]] = {}
 
         for task, claim, output in commands:
             if output is None:
@@ -270,19 +270,24 @@ class TickLoop:
                     # Higher priority wins - track preemption
                     old_task = winners[joint_name][3]
                     if old_task not in preemptions:
-                        preemptions[old_task] = set()
-                    preemptions[old_task].add(joint_name)
+                        preemptions[old_task] = {}
+                    preemptions[old_task][joint_name] = task.name
                     winners[joint_name] = (priority, value, mode, task.name)
 
                 elif priority == winners[joint_name][0]:
                     # Same priority
                     if mode != winners[joint_name][2]:
                         # Mode conflict at same priority - log and drop
+                        winning_task = winners[joint_name][3]
                         logger.warning(
                             f"Mode conflict on {joint_name}: {task.name} wants "
-                            f"{mode.value}, but {winners[joint_name][3]} wants "
-                            f"{winners[joint_name][2].value}. Dropping {task.name}."
+                            f"{mode.name}, but {winning_task} wants "
+                            f"{winners[joint_name][2].name}. Dropping {task.name}."
                         )
+                        # Notify dropped task of preemption
+                        if task.name not in preemptions:
+                            preemptions[task.name] = {}
+                        preemptions[task.name][joint_name] = winning_task
                     # If same mode and same priority, first wins (keep existing)
 
         # Convert to simplified output: joint -> (value, mode, task_name)
@@ -293,15 +298,26 @@ class TickLoop:
 
         return joint_commands, preemptions
 
-    def _notify_preemptions(self, preemptions: dict[str, set[str]]) -> None:
-        """Notify each preempted task ONCE with all affected joints."""
+    def _notify_preemptions(self, preemptions: dict[str, dict[str, str]]) -> None:
+        """Notify each preempted task with affected joints, grouped by winning task."""
         with self._task_lock:
-            for task_name, joints in preemptions.items():
+            for task_name, joint_winners in preemptions.items():
                 task = self._tasks.get(task_name)
-                if task:
+                if not task:
+                    continue
+
+                # Group joints by winning task
+                by_winner: dict[str, set[str]] = {}
+                for joint, winner in joint_winners.items():
+                    if winner not in by_winner:
+                        by_winner[winner] = set()
+                    by_winner[winner].add(joint)
+
+                # Notify once per distinct winning task
+                for winner, joints in by_winner.items():
                     try:
                         task.on_preempted(
-                            by_task="higher_priority",
+                            by_task=winner,
                             joints=frozenset(joints),
                         )
                     except Exception as e:
@@ -326,6 +342,16 @@ class TickLoop:
 
             if hw_id not in hw_commands:
                 hw_commands[hw_id] = ({}, mode)
+            else:
+                # Check for mode conflict across joints on same hardware
+                existing_mode = hw_commands[hw_id][1]
+                if mode != existing_mode:
+                    logger.error(
+                        f"Mode conflict for hardware {hw_id}: joint {joint_name} wants "
+                        f"{mode.name} but hardware already has {existing_mode.name}. "
+                        f"Dropping command for {joint_name}."
+                    )
+                    continue
 
             hw_commands[hw_id][0][joint_name] = value
 

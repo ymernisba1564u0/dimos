@@ -131,11 +131,17 @@ class JointTrajectoryTask:
         # Use orchestrator's time, NOT time.time()
         t_elapsed = state.t_now - self._start_time
 
-        # Check completion
+        # Check completion - clamp to final position to ensure we reach goal
         if t_elapsed >= self._trajectory.duration:
             self._state = TrajectoryState.COMPLETED
             logger.info(f"Trajectory {self._name} completed after {t_elapsed:.3f}s")
-            return None
+            # Return final position to hold at goal
+            q_ref, _ = self._trajectory.sample(self._trajectory.duration)
+            return JointCommandOutput(
+                joint_names=self._joint_names_list,
+                positions=list(q_ref),
+                mode=ControlMode.POSITION,
+            )
 
         # Sample trajectory
         q_ref, _ = self._trajectory.sample(t_elapsed)

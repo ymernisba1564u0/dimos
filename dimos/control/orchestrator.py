@@ -180,6 +180,7 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
     def _setup_from_config(self) -> None:
         """Create hardware and tasks from config (called on start)."""
         for hw_cfg in self.config.hardware:
+            backend = None
             try:
                 backend = self._create_backend_from_config(hw_cfg)
                 if not backend.connect():
@@ -195,6 +196,12 @@ class ControlOrchestrator(Module[ControlOrchestratorConfig]):
                 )
             except Exception as e:
                 logger.error(f"Failed to setup hardware {hw_cfg.id}: {e}")
+                # Clean up connected backend on failure
+                if backend is not None and hasattr(backend, "disconnect"):
+                    try:
+                        backend.disconnect()
+                    except Exception:
+                        pass  # Best effort cleanup
                 raise
 
         for task_cfg in self.config.tasks:

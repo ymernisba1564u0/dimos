@@ -291,7 +291,9 @@ class TestJointTrajectoryTask:
         )
         output = trajectory_task.compute(state)
 
-        assert output is None
+        # On completion, returns final position (not None) to hold at goal
+        assert output is not None
+        assert output.positions == [1.0, 0.5, 0.25]  # Final trajectory point
         assert not trajectory_task.is_active()
         assert trajectory_task.get_state() == TrajectoryState.COMPLETED
 
