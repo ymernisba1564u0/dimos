@@ -52,6 +52,8 @@ class SimulationModule(Module[SimulationModuleConfig]):
     joint_position_command: In[JointCommand]
     joint_velocity_command: In[JointCommand]
 
+    MIN_CONTROL_RATE = 1.0
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._backend: SimManipInterface | None = None
@@ -183,7 +185,7 @@ class SimulationModule(Module[SimulationModuleConfig]):
             self._pending_positions = None
 
     def _control_loop(self) -> None:
-        period = 1.0 / max(self._control_rate, 1.0)
+        period = 1.0 / max(self._control_rate, self.MIN_CONTROL_RATE)
         while not self._stop_event.is_set():
             with self._command_lock:
                 positions = (
@@ -198,11 +200,10 @@ class SimulationModule(Module[SimulationModuleConfig]):
                     self._backend.write_joint_positions(positions)
                 elif velocities is not None:
                     self._backend.write_joint_velocities(velocities)
-
             time.sleep(period)
 
     def _monitor_loop(self) -> None:
-        period = 1.0 / max(self._monitor_rate, 1.0)
+        period = 1.0 / max(self._monitor_rate, self.MIN_CONTROL_RATE)
         while not self._stop_event.is_set():
             if not self._backend:
                 time.sleep(period)
@@ -247,32 +248,10 @@ class SimulationModule(Module[SimulationModuleConfig]):
         return [f"{self._joint_prefix}{i + 1}" for i in range(dof)]
 
 
-def get_blueprint() -> dict[str, Any]:
-    return {
-        "name": "simulation",
-        "class": SimulationModule,
-        "config": {
-            "engine": None,
-            "robot": None,
-            "config_path": None,
-            "headless": False,
-        },
-        "inputs": {
-            "joint_position_command": "JointCommand",
-            "joint_velocity_command": "JointCommand",
-        },
-        "outputs": {
-            "joint_state": "JointState",
-            "robot_state": "RobotState",
-        },
-    }
-
-
 simulation = SimulationModule.blueprint
 
 __all__ = [
     "SimulationModule",
     "SimulationModuleConfig",
-    "get_blueprint",
     "simulation",
 ]
