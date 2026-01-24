@@ -19,21 +19,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 import threading
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from reactivex.disposable import Disposable
 
 from dimos.core import In, Module, Out, rpc
 from dimos.core.module import ModuleConfig
 from dimos.msgs.sensor_msgs import JointCommand, JointState, RobotState
-from dimos.simulation.engines import get_engine
+from dimos.simulation.engines import EngineType, get_engine
 from dimos.simulation.manipulators.sim_manip_interface import SimManipInterface
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass
 class SimulationModuleConfig(ModuleConfig):
-    engine: str | None = None
-    config_path: str | None = None
+    engine: EngineType
+    config_path: Path
     headless: bool = False
 
 
@@ -64,10 +67,6 @@ class SimulationModule(Module[SimulationModuleConfig]):
         self._pending_velocities: list[float] | None = None
 
     def _create_backend(self) -> SimManipInterface:
-        if not self.config.engine:
-            raise ValueError("engine is required for SimulationModule")
-        if not self.config.config_path:
-            raise ValueError("config_path is required for SimulationModule")
         engine_cls = get_engine(self.config.engine)
         engine = engine_cls(
             config_path=self.config.config_path,
