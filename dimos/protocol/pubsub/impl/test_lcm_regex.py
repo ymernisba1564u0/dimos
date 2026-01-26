@@ -20,7 +20,8 @@ import time
 
 import pytest
 
-from dimos.protocol.pubsub.impl.lcmpubsub import Glob, LCMPubSubBase, Topic
+from dimos.msgs.geometry_msgs import Pose, Quaternion, Vector3
+from dimos.protocol.pubsub.impl.lcmpubsub import LCM, Glob, LCMPubSubBase, Topic
 
 
 @pytest.fixture
@@ -100,3 +101,51 @@ def test_subscribe_glob_doublestar(lcm: LCMPubSubBase) -> None:
     assert "/robot/arm" in topics
     assert "/robot/arm/joint1" in topics
     assert "/robot/leg/motor/speed" in topics
+
+
+@pytest.fixture
+def lcm_typed() -> Generator[LCM, None, None]:
+    lcm = LCM(autoconf=True)
+    lcm.start()
+    yield lcm
+    lcm.stop()
+
+
+def test_subscribe_all_with_typed_messages(lcm_typed: LCM) -> None:
+    """Test that subscribe_all receives correctly typed and decoded messages."""
+    from typing import Any
+
+    received: list[tuple[Any, Topic]] = []
+
+    lcm_typed.subscribe_all(lambda msg, topic: received.append((msg, topic)))
+
+    # Publish typed messages to different topics
+    vec = Vector3(1.0, 2.0, 3.0)
+    quat = Quaternion(0.0, 0.0, 0.0, 1.0)
+    pose = Pose(vec, quat)
+
+    lcm_typed.publish(Topic("/sensor/position", lcm_type=Vector3), vec)
+    lcm_typed.publish(Topic("/sensor/orientation", lcm_type=Quaternion), quat)
+    lcm_typed.publish(Topic("/robot/pose", lcm_type=Pose), pose)
+
+    time.sleep(0.1)
+
+    assert len(received) == 3
+
+    # Check topics are correct (str(topic) includes type info: /topic#module.ClassName)
+    topics = {str(r[1]) for r in received}
+    assert "/sensor/position#geometry_msgs.Vector3" in topics
+    assert "/sensor/orientation#geometry_msgs.Quaternion" in topics
+    assert "/robot/pose#geometry_msgs.Pose" in topics
+
+    # Check types and values are correctly decoded
+    for msg, topic in received:
+        if "position" in topic.pattern:
+            assert isinstance(msg, Vector3)
+            assert msg == vec
+        elif "orientation" in topic.pattern:
+            assert isinstance(msg, Quaternion)
+            assert msg == quat
+        elif "pose" in topic.pattern:
+            assert isinstance(msg, Pose)
+            assert msg == pose

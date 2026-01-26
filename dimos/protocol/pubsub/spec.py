@@ -107,8 +107,6 @@ class PubSub(PubSubBaseMixin[TopicT, MsgT], ABC):
 #
 # - DiscoveryPubSub: Native support for discovering new topics as they appear.
 #   Provides a default subscribe_all() by subscribing to each discovered topic.
-
-
 class AllPubSub(PubSub[TopicT, MsgT], ABC):
     """Mixin for PubSub that supports subscribing to all topics.
 
@@ -133,7 +131,7 @@ class AllPubSub(PubSub[TopicT, MsgT], ABC):
         return self.subscribe_all(on_msg)
 
 
-# this is for ros
+# This is for ros for now
 class DiscoveryPubSub(PubSub[TopicT, MsgT], ABC):
     """Mixin for PubSub that supports discovery of topics.
 
@@ -161,38 +159,3 @@ class DiscoveryPubSub(PubSub[TopicT, MsgT], ABC):
                 unsub()
 
         return unsubscribe_all
-
-
-class GlobPubSub(AllPubSub[TopicT, MsgT]):
-    """Mixin only used for specifying that the PubSub uses glob-style topic matching.
-
-    Subclass from this if you support glob style matching (e.g. MQTT, Redis, NATS, RabbitMQ).
-
-    Examples:
-        - "sensor/*" matches "sensor/temp", "sensor/humidity" (single level)
-        - "robot/**" matches "robot/arm/joint1", "robot/camera/rgb" (multi-level)
-    """
-
-    @abstractmethod
-    def subscribe_all(self, callback: Callable[[MsgT, TopicT], None]) -> Callable[[], None]:
-        raise NotImplementedError("Not Implemented")
-
-    ...
-
-
-class RegexPubSub(GlobPubSub[TopicT, MsgT]):
-    """Mixin only used for specifying that the PubSub uses regex-style topic matching.
-
-    Subclass from this if you support regex pattern matching (e.g. LCM, ZeroMQ, Zenoh).
-
-    Examples:
-        - "sensor/.*" matches "sensor/temp", "sensor/humidity"
-        - "robot/(arm|leg)/.*" matches "robot/arm/joint1", "robot/leg/motor2"
-        - "device/[0-9]+" matches "device/1", "device/42", "device/123"
-    """
-
-    @abstractmethod
-    def subscribe_all(self, callback: Callable[[MsgT, TopicT], None]) -> Callable[[], None]:
-        raise NotImplementedError("Not Implemented")
-
-    ...

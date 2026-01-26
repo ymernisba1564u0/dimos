@@ -23,7 +23,7 @@ from dimos.protocol.pubsub.encoders import (
     LCMEncoderMixin,
     PickleEncoderMixin,
 )
-from dimos.protocol.pubsub.spec import PubSub
+from dimos.protocol.pubsub.spec import AllPubSub, PubSub
 from dimos.protocol.service.lcmservice import LCMConfig, LCMService, autoconf
 from dimos.utils.logging_config import setup_logger
 
@@ -114,8 +114,30 @@ class Topic:
             return self.pattern
         return f"{self.pattern}#{self.lcm_type.msg_name}"
 
+    @staticmethod
+    def from_channel_str(channel: str, default_lcm_type: type[DimosMsg] | None = None) -> Topic:
+        """Create Topic from channel string.
 
-class LCMPubSubBase(LCMService, PubSub[Topic, Any]):
+        Channel format: /topic#module.ClassName
+        Falls back to default_lcm_type if type cannot be parsed.
+        """
+        if "#" not in channel:
+            return Topic(topic=channel, lcm_type=default_lcm_type)
+
+        topic_str, type_name = channel.rsplit("#", 1)
+        try:
+            # type_name format: "geometry_msgs.Vector3"
+            module_name, class_name = type_name.rsplit(".", 1)
+            import importlib
+
+            module = importlib.import_module(f"dimos.msgs.{module_name}")
+            lcm_type = getattr(module, class_name)
+            return Topic(topic=topic_str, lcm_type=lcm_type)
+        except (ValueError, ImportError, AttributeError):
+            return Topic(topic=topic_str, lcm_type=default_lcm_type)
+
+
+class LCMPubSubBase(LCMService, AllPubSub[Topic, Any]):
     """LCM-based PubSub with native regex subscription support.
 
     LCM natively supports regex patterns in subscribe(), so we implement
@@ -135,6 +157,9 @@ class LCMPubSubBase(LCMService, PubSub[Topic, Any]):
         topic_str = str(topic) if isinstance(topic, Topic) else topic
         self.l.publish(topic_str, message)
 
+    def subscribe_all(self, callback: Callable[[bytes, Topic], Any]) -> Callable[[], None]:
+        return self.subscribe(Topic(re.compile(".*")), callback)
+
     def subscribe(
         self, topic: Topic | str, callback: Callable[[bytes, Topic | str], Any]
     ) -> Callable[[], None]:
@@ -150,8 +175,7 @@ class LCMPubSubBase(LCMService, PubSub[Topic, Any]):
         if isinstance(topic, Topic) and topic.is_pattern:
 
             def handler(channel: str, msg: bytes) -> None:
-                matched_topic = Topic(topic=channel, lcm_type=topic.lcm_type)
-                callback(msg, matched_topic)
+                callback(msg, Topic.from_channel_str(channel, topic.lcm_type))
 
             lcm_subscription = self.l.subscribe(str(topic), handler)
         else:
