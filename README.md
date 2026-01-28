@@ -76,6 +76,58 @@ export DISPLAY=:1 # Or DISPLAY=:0 if getting GLFW/OpenGL X11 errors
 dimos --viewer-backend rerun-web --simulation run unitree-go2
 ```
 
+### Unitree G1 SDK2 policies (MuJoCo + real robot)
+
+#### Install extras
+
+```sh
+# SDK2 DDS + Unitree SDK2 Python bindings
+uv pip install 'dimos[base,unitree,sdk2]'
+
+# Optional: Falcon loco_manip upper-body IK (Pinocchio-only, pip-friendly)
+uv pip install 'dimos[falcon]'
+```
+
+#### Policy selection via `bundle.json`
+
+MuJoCo profiles can include `data/mujoco_sim/<profile>/bundle.json` with:
+
+- `policy`: ONNX filename (in the profile folder)
+- `robot_type`: usually `"g1"`
+- `policy_kind`:
+  - `"mjlab_velocity"` (default)
+  - `"falcon_loco_manip"`
+- `policy_config`: (Falcon only) YAML filename (in the profile folder)
+
+Example:
+
+```json
+{
+  "robot_type": "g1",
+  "policy_kind": "falcon_loco_manip",
+  "policy": "policy.onnx",
+  "policy_config": "g1_29dof_falcon.yaml",
+  "mode_pr": 0,
+  "policy_action_scale": 0.25
+}
+```
+
+#### Run: sim2sim (SDK2)
+
+```sh
+MUJOCO_CONTROL_MODE=sdk2 dimos --mujoco-profile unitree_g1_sdk2 run unitree-g1-sim
+```
+
+#### Run: sim2real (mirror visualization + real robot commands)
+
+```sh
+SDK2_INTERFACE=en7 SDK2_DOMAIN_ID=0 MUJOCO_CONTROL_MODE=mirror dimos --mujoco-profile unitree_g1_sdk2 run unitree-g1-sim
+```
+
+Open Command Center at `http://localhost:7779/command-center`:
+- **Enable Policy / E‑Stop** controls arming
+- **Falcon panel** publishes policy params (`stand`, base height, waist, EE targets, IK toggle, collision-check toggle)
+
 #### Get it working on a physical robot!
 
 ```sh
