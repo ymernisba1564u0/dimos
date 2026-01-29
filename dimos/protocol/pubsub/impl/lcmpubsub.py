@@ -192,6 +192,10 @@ class LCMPubSubBase(LCMService, AllPubSub[Topic, Any]):
         return unsubscribe
 
 
+# these ignoress might be unsolvable
+# and should use composition not inheritance for encoding/decoding
+
+
 class LCM(  # type: ignore[misc]
     LCMEncoderMixin,  # type: ignore[type-arg]
     LCMPubSubBase,
