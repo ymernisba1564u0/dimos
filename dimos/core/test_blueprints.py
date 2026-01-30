@@ -109,7 +109,7 @@ module_c = ModuleC.blueprint
 def test_get_connection_set() -> None:
     assert _BlueprintAtom.create(CatModule, args=("arg1",), kwargs={"k": "v"}) == _BlueprintAtom(
         module=CatModule,
-        connections=(
+        streams=(
             StreamRef(name="pet_cat", type=Petting, direction="in"),
             StreamRef(name="scratches", type=Scratch, direction="out"),
         ),
@@ -126,7 +126,7 @@ def test_autoconnect() -> None:
         blueprints=(
             _BlueprintAtom(
                 module=ModuleA,
-                connections=(
+                streams=(
                     StreamRef(name="data1", type=Data1, direction="out"),
                     StreamRef(name="data2", type=Data2, direction="out"),
                 ),
@@ -136,7 +136,7 @@ def test_autoconnect() -> None:
             ),
             _BlueprintAtom(
                 module=ModuleB,
-                connections=(
+                streams=(
                     StreamRef(name="data1", type=Data1, direction="in"),
                     StreamRef(name="data2", type=Data2, direction="in"),
                     StreamRef(name="data3", type=Data3, direction="out"),
@@ -218,7 +218,7 @@ def test_name_conflicts_are_reported() -> None:
         pytest.fail("Expected ValueError to be raised")
     except ValueError as e:
         error_message = str(e)
-        assert "Blueprint cannot start because there are conflicting connections" in error_message
+        assert "Blueprint cannot start because there are conflicting streams" in error_message
         assert "'shared_data' has conflicting types" in error_message
         assert "Data1 in ModuleA" in error_message
         assert "Data2 in ModuleB" in error_message
@@ -240,7 +240,7 @@ def test_multiple_name_conflicts_are_reported() -> None:
         pytest.fail("Expected ValueError to be raised")
     except ValueError as e:
         error_message = str(e)
-        assert "Blueprint cannot start because there are conflicting connections" in error_message
+        assert "Blueprint cannot start because there are conflicting streams" in error_message
         assert "'sensor_data' has conflicting types" in error_message
         assert "'control_signal' has conflicting types" in error_message
 
@@ -281,10 +281,10 @@ def test_that_remapping_can_resolve_conflicts() -> None:
 
 @pytest.mark.integration
 def test_remapping() -> None:
-    """Test that remapping connections works correctly."""
+    """Test that remapping streams works correctly."""
     pubsub.lcm.autoconf()
 
-    # Define test modules with connections that will be remapped
+    # Define test modules with streams that will be remapped
     class SourceModule(Module):
         color_image: Out[Data1]  # Will be remapped to 'remapped_data'
 
@@ -310,7 +310,7 @@ def test_remapping() -> None:
     # The original name shouldn't be in the name types since it's remapped
     assert ("color_image", Data1) not in blueprint_set._all_name_types
 
-    # Build and verify connections work
+    # Build and verify streams work
     coordinator = blueprint_set.build(**_BUILD_WITHOUT_RERUN)
 
     try:
@@ -345,14 +345,14 @@ def test_future_annotations_support() -> None:
     to the actual In/Out types.
     """
 
-    # Test that connections are properly extracted from modules with future annotations
+    # Test that streams are properly extracted from modules with future annotations
     out_blueprint = _BlueprintAtom.create(FutureModuleOut, args=(), kwargs={})
-    assert len(out_blueprint.connections) == 1
-    assert out_blueprint.connections[0] == StreamRef(name="data", type=FutureData, direction="out")
+    assert len(out_blueprint.streams) == 1
+    assert out_blueprint.streams[0] == StreamRef(name="data", type=FutureData, direction="out")
 
     in_blueprint = _BlueprintAtom.create(FutureModuleIn, args=(), kwargs={})
-    assert len(in_blueprint.connections) == 1
-    assert in_blueprint.connections[0] == StreamRef(name="data", type=FutureData, direction="in")
+    assert len(in_blueprint.streams) == 1
+    assert in_blueprint.streams[0] == StreamRef(name="data", type=FutureData, direction="in")
 
 
 @pytest.mark.integration

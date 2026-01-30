@@ -57,7 +57,7 @@ def render(
     blueprint_set: Blueprint,
     *,
     layout: set[LayoutAlgo] | None = None,
-    ignored_connections: set[tuple[str, str]] | None = None,
+    ignored_streams: set[tuple[str, str]] | None = None,
     ignored_modules: set[str] | None = None,
 ) -> str:
     """Generate a hub-style DOT graph from a Blueprint.
@@ -68,7 +68,7 @@ def render(
     Args:
         blueprint_set: The blueprint set to visualize.
         layout: Set of layout algorithms to apply. Default is none (let graphviz decide).
-        ignored_connections: Set of (name, type_name) tuples to ignore.
+        ignored_streams: Set of (name, type_name) tuples to ignore.
         ignored_modules: Set of module names to ignore.
 
     Returns:
@@ -77,8 +77,8 @@ def render(
     """
     if layout is None:
         layout = set()
-    if ignored_connections is None:
-        ignored_connections = DEFAULT_IGNORED_CONNECTIONS
+    if ignored_streams is None:
+        ignored_streams = DEFAULT_IGNORED_CONNECTIONS
     if ignored_modules is None:
         ignored_modules = DEFAULT_IGNORED_MODULES
 
@@ -91,7 +91,7 @@ def render(
 
     for bp in blueprint_set.blueprints:
         module_classes[bp.module.__name__] = bp.module
-        for conn in bp.connections:
+        for conn in bp.streams:
             # Apply remapping
             remapped_name = blueprint_set.remapping_map.get((bp.module, conn.name), conn.name)
             key = (remapped_name, conn.type)
@@ -107,7 +107,7 @@ def render(
         type_name = type_.__name__
         if key not in consumers:
             continue
-        if (name, type_name) in ignored_connections:
+        if (name, type_name) in ignored_streams:
             continue
         # Check if all modules are ignored
         valid_producers = [m for m in producers[key] if m.__name__ not in ignored_modules]

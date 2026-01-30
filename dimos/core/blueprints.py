@@ -54,7 +54,7 @@ class ModuleRef:
 @dataclass(frozen=True)
 class _BlueprintAtom:
     module: type[Module]
-    connections: tuple[StreamRef, ...]
+    streams: tuple[StreamRef, ...]
     module_refs: tuple[ModuleRef, ...]
     args: tuple[Any, ...]
     kwargs: dict[str, Any]
@@ -63,7 +63,7 @@ class _BlueprintAtom:
     def create(
         cls, module: type[Module], args: tuple[Any, ...], kwargs: dict[str, Any]
     ) -> "_BlueprintAtom":
-        connections: list[StreamRef] = []
+        streams: list[StreamRef] = []
         module_refs: list[ModuleRef] = []
 
         # Use get_type_hints() to properly resolve string annotations.
@@ -82,7 +82,7 @@ class _BlueprintAtom:
             if origin in (In, Out):
                 direction = "in" if origin == In else "out"
                 type_ = get_args(annotation)[0]
-                connections.append(
+                streams.append(
                     StreamRef(name=name, type=type_, direction=direction)  # type: ignore[arg-type]
                 )
             # linking to unknown module via Spec
@@ -94,7 +94,7 @@ class _BlueprintAtom:
 
         return cls(
             module=module,
-            connections=tuple(connections),
+            streams=tuple(streams),
             module_refs=tuple(module_refs),
             args=args,
             kwargs=kwargs,
@@ -195,8 +195,8 @@ class Blueprint:
         # Apply remappings to get the actual names that will be used
         result = set()
         for blueprint in self.blueprints:
-            for conn in blueprint.connections:
-                # Check if this connection should be remapped
+            for conn in blueprint.streams:
+                # Check if this stream should be remapped
                 remapped_name = self.remapping_map.get((blueprint.module, conn.name), conn.name)
                 if isinstance(remapped_name, str):
                     result.add((remapped_name, conn.type))
@@ -225,10 +225,10 @@ class Blueprint:
         name_to_modules = defaultdict(list)
 
         for blueprint in self.blueprints:
-            for conn in blueprint.connections:
-                connection_name = self.remapping_map.get((blueprint.module, conn.name), conn.name)
-                name_to_types[connection_name].add(conn.type)
-                name_to_modules[connection_name].append((blueprint.module, conn.type))
+            for conn in blueprint.streams:
+                stream_name = self.remapping_map.get((blueprint.module, conn.name), conn.name)
+                name_to_types[stream_name].add(conn.type)
+                name_to_modules[stream_name].append((blueprint.module, conn.type))
 
         conflicts = {}
         for conn_name, types in name_to_types.items():
@@ -241,7 +241,7 @@ class Blueprint:
         if not conflicts:
             return
 
-        error_lines = ["Blueprint cannot start because there are conflicting connections."]
+        error_lines = ["Blueprint cannot start because there are conflicting streams."]
         for name, modules_by_type in conflicts.items():
             type_entries = []
             for conn_type, modules in modules_by_type.items():
@@ -265,22 +265,22 @@ class Blueprint:
                 kwargs["global_config"] = global_config
             module_coordinator.deploy(blueprint.module, *blueprint.args, **kwargs)
 
-    def _connect_transports(self, module_coordinator: ModuleCoordinator) -> None:
-        # dict when given (final/remapped) connection name+type, provides a list of modules + original (non-remapped) connection names
-        connections = defaultdict(list)
+    def _connect_streams(self, module_coordinator: ModuleCoordinator) -> None:
+        # dict when given (final/remapped) stream name+type, provides a list of modules + original (non-remapped) stream names
+        streams = defaultdict(list)
 
         for blueprint in self.blueprints:
-            for conn in blueprint.connections:
-                # Check if this connection should be remapped
+            for conn in blueprint.streams:
+                # Check if this stream should be remapped
                 remapped_name = self.remapping_map.get((blueprint.module, conn.name), conn.name)
                 if isinstance(remapped_name, str):
                     # Group by remapped name and type
-                    connections[remapped_name, conn.type].append((blueprint.module, conn.name))
+                    streams[remapped_name, conn.type].append((blueprint.module, conn.name))
 
-        # Connect all In/Out connections by remapped name and type.
-        for remapped_name, stream_type in connections.keys():
+        # Connect all In/Out streams by remapped name and type.
+        for remapped_name, stream_type in streams.keys():
             transport = self._get_transport_for(remapped_name, stream_type)
-            for module, original_name in connections[(remapped_name, stream_type)]:
+            for module, original_name in streams[(remapped_name, stream_type)]:
                 instance = module_coordinator.get_instance(module)  # type: ignore[assignment]
                 instance.set_transport(original_name, transport)  # type: ignore[union-attr]
                 logger.info(
@@ -364,7 +364,7 @@ class Blueprint:
                         valid_module_candidates[0]
                     )
 
-        # now that we know the connections, we mutate the RPCClient objects
+        # now that we know the streams, we mutate the RPCClient objects
         for (base_module, module_ref_name), target_module in mod_and_mod_ref_to_proxy.items():
             base_module_proxy = module_coordinator.get_instance(base_module)
             target_module_proxy = module_coordinator.get_instance(target_module)  # type: ignore[type-var,arg-type]
@@ -530,7 +530,7 @@ class Blueprint:
 
         # all module constructors are called here (each of them setup their own)
         self._deploy_all_modules(module_coordinator, global_config)
-        self._connect_transports(module_coordinator)
+        self._connect_streams(module_coordinator)
         self._connect_rpc_methods(module_coordinator)
         self._connect_module_refs(module_coordinator)
 
