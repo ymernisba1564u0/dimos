@@ -46,6 +46,7 @@ build/
 # Large data files
 data/*
 !data/.lfs/
+!data/graspgen/
 
 # Model files (can be downloaded at runtime)
 *.pt

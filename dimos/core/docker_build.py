@@ -14,28 +14,28 @@
 
 """
 Docker image building and Dockerfile conversion utilities.
-
 Converts any Dockerfile into a DimOS module container by appending a footer
 that installs DimOS and creates the module entrypoint.
 """
-
 from __future__ import annotations
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 from dimos.utils.logging_config import setup_logger
-
 if TYPE_CHECKING:
-    from dimos.core.docker_module import DockerModuleConfig
+    from dimos.core.docker_runner import DockerModuleConfig
 
 logger = setup_logger()
 
 # Timeout for quick Docker commands
 DOCKER_CMD_TIMEOUT = 20
 
+# Sentinel value to detect already-converted Dockerfiles (UUID ensures uniqueness)
+DIMOS_SENTINEL = "DIMOS-MODULE-CONVERSION-427593ae-c6e8-4cf1-9b2d-ee81a420a5dc"
+
 # Footer appended to Dockerfiles for DimOS module conversion
-DIMOS_FOOTER = """
-# ==== DIMOS MODULE CONVERSION ====
+DIMOS_FOOTER = f"""
+# ==== {DIMOS_SENTINEL} ====
 # Copy DimOS source from build context
 COPY dimos /dimos/source/dimos/
 COPY pyproject.toml /dimos/source/
@@ -70,7 +70,7 @@ def _convert_dockerfile(dockerfile: Path) -> Path:
     content = dockerfile.read_text()
 
     # Already converted?
-    if "DIMOS MODULE CONVERSION" in content:
+    if DIMOS_SENTINEL in content:
         return dockerfile
 
     logger.info(f"Converting {dockerfile.name} to DimOS format")
@@ -81,9 +81,8 @@ def _convert_dockerfile(dockerfile: Path) -> Path:
 
 def build_image(cfg: DockerModuleConfig) -> None:
     """Build Docker image using footer mode conversion."""
-    if not cfg.docker_file or not cfg.docker_image:
-        raise ValueError("docker_file and docker_image are required")
-
+    if cfg.docker_file is None:
+        raise ValueError("docker_file is required for building Docker images")
     dockerfile = _convert_dockerfile(cfg.docker_file)
 
     context = cfg.docker_build_context or cfg.docker_file.parent
@@ -99,8 +98,6 @@ def build_image(cfg: DockerModuleConfig) -> None:
 
 def image_exists(cfg: DockerModuleConfig) -> bool:
     """Check if the configured Docker image exists locally."""
-    if not cfg.docker_image:
-        return False
     return _image_exists(_docker_bin(cfg), cfg.docker_image)
 
 __all__ = [

@@ -11,16 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dimos.grasping.graspgen_module import (
+from dimos.manipulation.grasping.grasping import (
+    GraspingModule,
+    grasping_module,
+)
+from dimos.manipulation.grasping.graspgen_module import (
     GraspGenConfig,
     GraspGenModule,
-    SUPPORTED_GRIPPERS,
     graspgen,
 )
 
 __all__ = [
-    "GraspGenModule",
     "GraspGenConfig",
-    "SUPPORTED_GRIPPERS",
+    "GraspGenModule",
+    "GraspingModule",
     "graspgen",
+    "grasping_module",
 ]

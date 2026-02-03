@@ -13,41 +13,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from pathlib import Path
-
 from dimos.agents.agent import llm_agent
 from dimos.agents.cli.human import human_input
-from dimos.agents.skills.grasping import grasping_skill
 from dimos.core.blueprints import autoconnect
-from dimos.grasping import graspgen
-from dimos.grasping.temp_graspgen_testing import grasp_pipeline
 from dimos.hardware.sensors.camera.realsense import realsense_camera
+from dimos.manipulation.grasping import graspgen
+from dimos.manipulation.grasping.grasping import grasping_module
 from dimos.perception.detection.detectors.yoloe import YoloePromptMode
 from dimos.perception.object_scene_registration import object_scene_registration_module
 from dimos.robot.foxglove_bridge import foxglove_bridge
 
-camera_choice = "realsense"
+camera_module = realsense_camera(enable_pointcloud=False)
 
-if camera_choice == "realsense":
-    camera_module = realsense_camera(enable_pointcloud=False)
-    target_frame = "camera_link"
-else:
-    raise ValueError(f"Invalid camera choice: {camera_choice}")
-
-demo_perception_grasping = autoconnect(
+demo_grasping = autoconnect(
     camera_module,
-    object_scene_registration_module(target_frame=target_frame, prompt_mode=YoloePromptMode.PROMPT),
+    object_scene_registration_module(target_frame="camera_color_optical_frame", prompt_mode=YoloePromptMode.PROMPT),
+    grasping_module(), 
     graspgen(
-        docker_file_path=Path(__file__).parent.parent / "grasping" / "docker_context" / "Dockerfile",
-        docker_build_context=Path(__file__).parent.parent.parent,  # repo root
+        docker_file_path=Path(__file__).parent / "docker_context" / "Dockerfile",
+        docker_build_context=Path(__file__).parent.parent.parent.parent,  # repo root
         gripper_type="robotiq_2f_140",
-        save_visualization_data=False,
         num_grasps=400,
         topk_num_grasps=100,
         filter_collisions=False,
-        docker_volumes=[("/tmp", "/tmp", "rw")],
+        save_visualization_data=False, # to just see the visualization simply run ``grasping/visualize_grasps.py`` as a standalone script
+        docker_volumes=[("/tmp", "/tmp", "rw")], #Grasp visualization debug standalone: python -m dimos.manipulation.grasping.visualize_grasps
     ),
-    grasp_pipeline(object_name="object"),
-    grasping_skill(),
     foxglove_bridge(),
     human_input(),
     llm_agent(),

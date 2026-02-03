@@ -12,19 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from __future__ import annotations
-
 import os
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
 import numpy as np
-
-from dimos.core.docker_module import DockerModuleConfig
+from dimos.core.docker_runner import DockerModuleConfig
 from dimos.core.module import Module, rpc
-from dimos.core.stream import In, Out
+from dimos.core.stream import Out
 from dimos.msgs.geometry_msgs import PoseArray
 from dimos.msgs.sensor_msgs import PointCloud2
 from dimos.msgs.std_msgs import Header
@@ -33,7 +30,10 @@ from dimos.utils.transform_utils import matrix_to_pose
 
 logger = setup_logger()
 
-SUPPORTED_GRIPPERS = frozenset({"robotiq_2f_140", "franka_panda", "single_suction_cup_30mm"})
+# Inference constants
+MIN_POINTS_FOR_INFERENCE = 50
+OUTLIER_REMOVAL_THRESHOLD = 100
+COLLISION_FILTER_THRESHOLD = 0.02
 
 
 @dataclass
@@ -46,7 +46,7 @@ class GraspGenConfig(DockerModuleConfig):
     docker_shm_size: str = "4g"
 
     # GraspGen settings
-    gripper_type: str = "robotiq_2f_140"
+    gripper_type: str = "robotiq_2f_140" # use any from robotiq_2f_140", "franka_panda", "single_suction_cup_30mm"
     num_grasps: int = 400
     topk_num_grasps: int = 100
     grasp_threshold: float = -1.0
@@ -56,35 +56,27 @@ class GraspGenConfig(DockerModuleConfig):
 
 
 class GraspGenModule(Module[GraspGenConfig]):
-    default_config = GraspGenConfig
+    """Grasp generation module running in Docker. """
 
-    # Streams
-    pointcloud: In[PointCloud2]
-    scene_pointcloud: In[PointCloud2]
+    default_config = GraspGenConfig
     grasps: Out[PoseArray]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        if self.config.gripper_type not in SUPPORTED_GRIPPERS:
-            raise ValueError(f"Unsupported gripper '{self.config.gripper_type}'. Use: {SUPPORTED_GRIPPERS}")
         self._sampler = self._gripper_info = None
         self._initialized = False
 
     @rpc
     def start(self) -> None:
         super().start()
+        if not self._initialize_graspgen():
+            raise RuntimeError("Failed to initialize GraspGen")
         logger.info(f"GraspGenModule started (gripper={self.config.gripper_type})")
 
     @rpc
     def stop(self) -> None:
         self._sampler = self._gripper_info = None
         self._initialized = False
-        # Clear GPU memory if torch available
-        try:
-            import torch
-            torch.cuda.empty_cache()
-        except Exception:
-            pass
         super().stop()
 
     @rpc
@@ -94,21 +86,14 @@ class GraspGenModule(Module[GraspGenConfig]):
         scene_pointcloud: PointCloud2 | None = None,
     ) -> PoseArray | None:
         """Generate grasp poses for the given pointcloud."""
-        # Validate and initialize
-        if not pointcloud:
-            return None
-        if not self._initialized and not self._initialize_graspgen():
-            return None
-
         try:
-            start_time = time.time()
             points = self._extract_points(pointcloud)
             if len(points) < 10:
                 return None
 
             # Run inference (with optional collision filtering)
             scene_points = None
-            if scene_pointcloud and self.config.filter_collisions:
+            if scene_pointcloud is not None and self.config.filter_collisions:
                 scene_points = self._extract_points(scene_pointcloud)
             grasps, scores = self._run_inference(points, scene_points)
             if len(grasps) == 0:
@@ -131,8 +116,10 @@ class GraspGenModule(Module[GraspGenConfig]):
             return True
 
         try:
-            # Setup GraspGen path and environment
-            graspgen_path = os.environ.get("GRASPGEN_PATH", "/dimos/third_party/GraspGen")
+            # Setup GraspGen path and environment (must be set by Dockerfile)
+            graspgen_path = os.environ.get("GRASPGEN_PATH")
+            if graspgen_path is None:
+                raise RuntimeError("GRASPGEN_PATH environment variable not set. Ensure Dockerfile sets ENV GRASPGEN_PATH.")
             if graspgen_path not in sys.path:
                 sys.path.insert(0, graspgen_path)
             os.environ["PYOPENGL_PLATFORM"] = "egl"
@@ -153,7 +140,9 @@ class GraspGenModule(Module[GraspGenConfig]):
             return False
 
     def _get_gripper_config_path(self) -> str:
-        graspgen_path = os.environ.get("GRASPGEN_PATH", "/dimos/third_party/GraspGen")
+        graspgen_path = os.environ.get("GRASPGEN_PATH")
+        if graspgen_path is None:
+            raise RuntimeError("GRASPGEN_PATH environment variable not set")
         config_name = f"graspgen_{self.config.gripper_type}.yml"
 
         for subdir in ("GraspGenModels/checkpoints", "checkpoints"):
@@ -175,17 +164,16 @@ class GraspGenModule(Module[GraspGenConfig]):
         from grasp_gen.utils.point_cloud_utils import filter_colliding_grasps, point_cloud_outlier_removal
 
         pc_torch = torch.from_numpy(object_pc)
-        min_points = 50
 
-        if len(object_pc) > 100:
+        if len(object_pc) > OUTLIER_REMOVAL_THRESHOLD:
             pc_filtered, _ = point_cloud_outlier_removal(pc_torch)
             object_pc_filtered = pc_filtered.numpy()
-            if len(object_pc_filtered) < min_points:
+            if len(object_pc_filtered) < MIN_POINTS_FOR_INFERENCE:
                 object_pc_filtered = object_pc
         else:
             object_pc_filtered = object_pc
 
-        if len(object_pc_filtered) < min_points:
+        if len(object_pc_filtered) < MIN_POINTS_FOR_INFERENCE:
             return np.array([]), np.array([])
 
         grasps, scores = GraspGenSampler.run_inference(
@@ -216,7 +204,7 @@ class GraspGenModule(Module[GraspGenConfig]):
                 scene_pc=scene_pc_centered,
                 grasp_poses=grasps_centered,
                 gripper_collision_mesh=self._gripper_info.collision_mesh,
-                collision_threshold=0.02,
+                collision_threshold=COLLISION_FILTER_THRESHOLD,
             )
             grasps_np = grasps_np[collision_free_mask]
             scores_np = scores_np[collision_free_mask]
@@ -262,4 +250,4 @@ def graspgen(docker_file_path: Path | str, docker_build_context: Path | str | No
     return GraspGenModule.blueprint(docker_file=dockerfile, docker_build_context=build_context, **kwargs)
 
 
-__all__ = ["GraspGenModule", "GraspGenConfig", "SUPPORTED_GRIPPERS", "graspgen"]
+__all__ = ["GraspGenModule", "GraspGenConfig", "graspgen"]

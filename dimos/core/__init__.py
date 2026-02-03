@@ -94,12 +94,13 @@ def patchdask(dask_client: Client, local_cluster: LocalCluster) -> DimosCluster:
         *args,
         **kwargs,
     ):
-        from dimos.core.docker_module import DockerModule, is_docker_module
+        from dimos.core.docker_runner import DockerModule, is_docker_module
 
         # Check if this module should run in Docker (based on its default_config)
         if is_docker_module(actor_class):
             logger.info("Deploying module in Docker.", module=actor_class.__name__)
             dm = DockerModule(actor_class, *args, **kwargs)
+            dm.start()  # Explicit start - follows create -> configure -> start lifecycle
             dask_client._docker_modules.append(dm)  # type: ignore[attr-defined]
             return dm
 

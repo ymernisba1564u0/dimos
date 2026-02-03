@@ -51,13 +51,14 @@ RUN conda run -n app pip install --no-cache-dir --no-build-isolation torch-scatt
 RUN conda run -n app pip install --no-cache-dir \
     numpy trimesh pillow pyrender imageio scipy
 
-# Copy model checkpoints
-ARG CHECKPOINTS_PATH=data/graspgen/checkpoints
-COPY ${CHECKPOINTS_PATH} /app/GraspGen/checkpoints
+# Model checkpoints from LFS archive
+COPY data/.lfs/models_graspgen.tar.gz /tmp/
+RUN tar -xzf /tmp/models_graspgen.tar.gz -C /app/GraspGen/ && \
+    rm /tmp/models_graspgen.tar.gz
 
 # Verify checkpoints exist
 RUN test -f /app/GraspGen/checkpoints/graspgen_robotiq_2f_140_gen.pth || \
-    (echo "ERROR: Model checkpoints not found at ${CHECKPOINTS_PATH}" && exit 1)
+    (echo "ERROR: Model checkpoints not found" && exit 1)
 
 # Environment variables for GraspGen
 ENV GRASPGEN_PATH=/app/GraspGen
@@ -69,13 +70,3 @@ ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Default command
 CMD ["conda", "run", "-n", "app", "python", "-c", "print('GraspGen ready')"]
-# ==== DIMOS MODULE CONVERSION ====
-# Copy DimOS source from build context
-COPY dimos /dimos/source/dimos/
-COPY pyproject.toml /dimos/source/
-COPY docker/python/module-install.sh /tmp/module-install.sh
-
-# Install DimOS and create entrypoint
-RUN bash /tmp/module-install.sh /dimos/source && rm /tmp/module-install.sh
-
-ENTRYPOINT ["/dimos/entrypoint.sh"]

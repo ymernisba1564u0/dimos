@@ -19,20 +19,20 @@ import json
 import os
 import signal
 import subprocess
+import threading
 import time
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
+from dimos.core.docker_build import build_image, image_exists
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.rpc_client import RpcCall
+from dimos.dashboard.rerun_init import RERUN_GRPC_PORT, RERUN_WEB_PORT
 from dimos.protocol.rpc import LCMRPC
 from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
-
-# Import well-known service ports from their canonical location
-from dimos.dashboard.rerun_init import RERUN_GRPC_PORT, RERUN_WEB_PORT
 
 DOCKER_RUN_TIMEOUT = 120  #     Timeout for `docker run` command execution
 DOCKER_CMD_TIMEOUT = 20 #       Timeout for quick Docker commands (inspect, rm, logs)
@@ -42,7 +42,7 @@ RPC_READY_TIMEOUT = 3.0 #       Timeout for RPC readiness probe during container
 LOG_TAIL_LINES = 200 #          Number of log lines to include in error messages
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DockerModuleConfig(ModuleConfig):
     """
     Configuration for running a DimOS module inside Docker.
@@ -51,8 +51,8 @@ class DockerModuleConfig(ModuleConfig):
     Example: docker_extra_args=["--cap-add=SYS_ADMIN", "--read-only"]
     """
     # Build / image
-    docker_image: str | None = None
-    docker_file: Path | None = None
+    docker_image: str
+    docker_file: Path | None = None  # Required on host for building, not needed in container
     docker_build_context: Path | None = None
     docker_build_args: dict[str, str] = field(default_factory=dict)
 
@@ -151,8 +151,6 @@ class DockerModule:
         # Config
         config_class = getattr(module_class, "default_config", DockerModuleConfig)
         config = config_class(**kwargs)
-        if not config.docker_image or not config.docker_file:
-            raise ValueError("docker_image and docker_file are required")
 
         # Module info
         self._module_class = module_class
@@ -170,14 +168,10 @@ class DockerModule:
         self._unsub_fns: list[Callable[[], None]] = []
         self._bound_rpc_calls: dict[str, RpcCall] = {}
 
-        # Build image if needed
-        from dimos.core.docker_build import build_image, image_exists
+        # Build image if needed (but don't start - caller must call start() explicitly)
         if not image_exists(config):
             logger.info(f"Building {config.docker_image}")
             build_image(config)
-
-        # Auto-start container (must be running before transports are connected)
-        self.start()
 
     def set_rpc_method(self, method: str, callable: RpcCall) -> None:
         callable.set_rpc(self.rpc)
@@ -283,7 +277,7 @@ class DockerModule:
         self._add_entrypoint_args(cmd, cfg)
         cmd.extend(cfg.docker_extra_args)
 
-        cmd.append(cfg.docker_image or "")
+        cmd.append(cfg.docker_image)
         cmd.extend(self._build_container_command(cfg))
         return cmd
 
@@ -298,7 +292,7 @@ class DockerModule:
             )
 
     def _add_lifecycle_args(self, cmd: list[str], cfg: DockerModuleConfig) -> None:
-        """Add --rm, --name, --restart args."""
+        """Add --rm and --name args."""
         if cfg.docker_rm:
             cmd.append("--rm")
             if cfg.docker_restart_policy and cfg.docker_restart_policy != "no":
@@ -377,7 +371,7 @@ class DockerModule:
         # Filter out docker-specific kwargs (paths, etc.) - only pass module config
         kwargs = {"config": _extract_module_config(cfg)}
         payload = {"module_path": module_path, "args": list(self._args), "kwargs": kwargs}
-        # DimOS base image entrypoint already runs "dimos.core.docker_module run"
+        # DimOS base image entrypoint already runs "dimos.core.docker_runner run"
         return ["--payload", json.dumps(payload, separators=(",", ":"))]
 
     def _wait_for_ready(self) -> None:
@@ -397,7 +391,8 @@ class DockerModule:
                 elapsed = time.time() - start_time
                 logger.info(f"{self.remote_name} ready ({elapsed:.1f}s)")
                 return
-            except Exception:
+            except (TimeoutError, ConnectionError, OSError):
+                # Module not ready yet - retry after poll interval
                 time.sleep(cfg.docker_poll_interval)
 
         logs = _tail_logs(cfg, self._container_name)
@@ -411,28 +406,27 @@ class StandaloneModuleRunner:
     """Runs a module inside Docker container. Blocks until SIGTERM/SIGINT."""
 
     def __init__(self, module_path: str, args: list[Any], kwargs: dict[str, Any]) -> None:
-        self.module_path = module_path
-        self.args = args
-        self.kwargs = kwargs
+        self._module_path = module_path
+        self._args = args
         self._module: Module | None = None
-        self._shutdown = False
+        self._shutdown = threading.Event()
+
+        # Merge config fields into kwargs (Configurable creates config from these)
+        if "config" in kwargs:
+            config_dict = kwargs.pop("config")
+            kwargs = {**config_dict, **kwargs}
+        self._kwargs = kwargs
 
     def start(self) -> None:
-        mod_path, class_name = self.module_path.rsplit(".", 1)
+        mod_path, class_name = self._module_path.rsplit(".", 1)
         mod = importlib.import_module(mod_path)
         module_class = getattr(mod, class_name)
 
-        # Merge config fields into kwargs (Configurable creates config from these)
-        if "config" in self.kwargs:
-            config_dict = self.kwargs.pop("config")
-            # Config fields go first, extra kwargs go later
-            self.kwargs = {**config_dict, **self.kwargs}
-
-        self._module = module_class(*self.args, **self.kwargs)
+        self._module = module_class(*self._args, **self._kwargs)
         logger.info(f"[docker runner] module constructed: {class_name}")
 
     def stop(self) -> None:
-        self._shutdown = True
+        self._shutdown.set()
         if self._module is not None:
             try:
                 self._module.stop()
@@ -440,8 +434,7 @@ class StandaloneModuleRunner:
                 logger.error(f"[docker runner] error stopping module: {e}")
 
     def wait(self) -> None:
-        while not self._shutdown:
-            time.sleep(0.2)
+        self._shutdown.wait()
 
 def _install_signal_handlers(runner: StandaloneModuleRunner) -> None:
     def shutdown(_sig: int, _frame: Any) -> None:
@@ -462,7 +455,7 @@ def _cli_run(payload_json: str) -> None:
     runner.wait()
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="dimos.core.docker_module")
+    parser = argparse.ArgumentParser(prog="dimos.core.docker_runner")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     runp = sub.add_parser("run", help="Run a module inside a container")
@@ -479,3 +472,10 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
+
+
+__all__ = [
+    "DockerModule",
+    "DockerModuleConfig",
+    "is_docker_module",
+]

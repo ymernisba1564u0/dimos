@@ -142,6 +142,18 @@ class ObjectSceneRegistrationModule(SkillModule):
         objects = self._object_db.find_by_name(name)
         return objects[0].pointcloud if objects else None
 
+    @rpc
+    def get_object_pointcloud_by_object_id(self, object_id: str) -> PointCloud2 | None:
+        """Get pointcloud for an object by its stable object_id (searches all objects)."""
+        obj = self._object_db.find_by_object_id(object_id)
+        if obj is None:
+            logger.warning(f"No object found with object_id='{object_id}'")
+            return None
+        pc = obj.pointcloud
+        num_points = len(pc.pointcloud.points) if pc else 0
+        logger.info(f"Found object '{object_id}' ({obj.name}) with {num_points} points")
+        return pc
+
     def _get_object_mask(self, object_id: str) -> NDArray[np.uint8] | None:
         """Get dilated mask for an object by ID."""
         for obj in self._object_db.get_all_objects():
