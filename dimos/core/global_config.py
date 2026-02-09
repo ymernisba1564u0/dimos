@@ -30,8 +30,6 @@ class GlobalConfig(BaseSettings):
     robot_ip: str | None = None
     simulation: bool = False
     replay: bool = False
-    rerun_enabled: bool = True
-    rerun_server_addr: str | None = None
     viewer_backend: ViewerBackend = "rerun"
     n_dask_workers: int = 2
     memory_limit: str = "auto"
