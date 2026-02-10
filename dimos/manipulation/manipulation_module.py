@@ -621,7 +621,9 @@ class ManipulationModule(Module):
         get_data("models_graspgen")
 
         project_root = get_project_root()
-        docker_file = project_root / "dimos" / "manipulation" / "grasping" / "docker_context" / "Dockerfile"
+        docker_file = (
+            project_root / "dimos" / "manipulation" / "grasping" / "docker_context" / "Dockerfile"
+        )
         self._graspgen = DockerModule(
             GraspGenModule,
             docker_file=docker_file,
