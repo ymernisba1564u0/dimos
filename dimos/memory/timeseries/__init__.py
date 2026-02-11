@@ -16,8 +16,20 @@
 from dimos.memory.timeseries.base import TimeSeriesStore
 from dimos.memory.timeseries.inmemory import InMemoryStore
 from dimos.memory.timeseries.pickledir import PickleDirStore
-from dimos.memory.timeseries.postgres import PostgresStore, reset_db
 from dimos.memory.timeseries.sqlite import SqliteStore
+
+
+def __getattr__(name: str):  # type: ignore[no-untyped-def]
+    if name == "PostgresStore":
+        from dimos.memory.timeseries.postgres import PostgresStore
+
+        return PostgresStore
+    if name == "reset_db":
+        from dimos.memory.timeseries.postgres import reset_db
+
+        return reset_db
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "InMemoryStore",

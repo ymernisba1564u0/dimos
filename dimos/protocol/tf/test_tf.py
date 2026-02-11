@@ -196,7 +196,7 @@ class TestTBuffer:
 
         buffer.add(transform)
         assert len(buffer) == 1
-        assert buffer[0] == transform
+        assert buffer.first() == transform
 
     def test_get(self) -> None:
         buffer = TBuffer()
@@ -250,7 +250,7 @@ class TestTBuffer:
 
         # Old transform should be pruned
         assert len(buffer) == 1
-        assert buffer[0].translation.x == 2.0
+        assert buffer.first().translation.x == 2.0
 
 
 class TestMultiTBuffer:

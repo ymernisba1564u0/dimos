@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from functools import reduce
 from typing import TypeVar
 
+from dimos.memory.timeseries.inmemory import InMemoryStore
 from dimos.msgs.geometry_msgs import PoseStamped, Transform
 from dimos.msgs.tf2_msgs import TFMessage
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM, Topic
@@ -72,7 +73,7 @@ TopicT = TypeVar("TopicT")
 
 
 # stores a single transform
-class TBuffer(TimestampedCollection[Transform]):
+class TBuffer_old(TimestampedCollection[Transform]):
     def __init__(self, buffer_size: float = 10.0) -> None:
         super().__init__()
         self.buffer_size = buffer_size
@@ -129,6 +130,46 @@ class TBuffer(TimestampedCollection[Transform]):
             )
 
         return f"TBuffer({len(self._items)} msgs)"
+
+
+class TBuffer(InMemoryStore[Transform]):
+    def __init__(self, buffer_size: float = 10.0) -> None:
+        super().__init__()
+        self.buffer_size = buffer_size
+
+    def add(self, transform: Transform) -> None:
+        self.save(transform)
+        self.prune_old(transform.ts - self.buffer_size)
+
+    def get(self, time_point: float | None = None, time_tolerance: float = 1.0) -> Transform | None:
+        """Get transform at specified time or latest if no time given."""
+        if time_point is None:
+            return self.last()
+        return self.find_closest(time_point, time_tolerance)
+
+    def __str__(self) -> str:
+        if len(self) == 0:
+            return "TBuffer(empty)"
+
+        first_item = self.first()
+        time_range = self.time_range()
+        if time_range and first_item:
+            from dimos.types.timestamped import to_human_readable
+
+            start_time = to_human_readable(time_range[0])
+            end_time = to_human_readable(time_range[1])
+            duration = time_range[1] - time_range[0]
+
+            frame_str = f"{first_item.frame_id} -> {first_item.child_frame_id}"
+
+            return (
+                f"TBuffer("
+                f"{frame_str}, "
+                f"{len(self)} msgs, "
+                f"{duration:.2f}s [{start_time} - {end_time}])"
+            )
+
+        return f"TBuffer({len(self)} msgs)"
 
 
 # stores multiple transform buffers

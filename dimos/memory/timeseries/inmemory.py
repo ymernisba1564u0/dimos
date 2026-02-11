@@ -84,7 +84,8 @@ class InMemoryStore(TimeSeriesStore[T]):
         if not candidates:
             return None
 
-        closest = min(candidates, key=lambda ts: abs(ts - timestamp))
+        # On ties, prefer the later timestamp (more recent data)
+        closest = max(candidates, key=lambda ts: (-abs(ts - timestamp), ts))
 
         if tolerance is not None and abs(closest - timestamp) > tolerance:
             return None
