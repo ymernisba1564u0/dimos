@@ -90,6 +90,10 @@ class ManipulationModuleConfig(ModuleConfig):
     graspgen_gripper_type: str = "robotiq_2f_140"
     graspgen_num_grasps: int = 400
     graspgen_topk_num_grasps: int = 100
+    graspgen_grasp_threshold: float = -1.0
+    graspgen_filter_collisions: bool = False
+    graspgen_save_visualization_data: bool = False
+    graspgen_visualization_output_path: str = "/tmp/grasp_visualization.json"
 
 
 class ManipulationModule(Module):
@@ -633,6 +637,10 @@ class ManipulationModule(Module):
             gripper_type=self.config.graspgen_gripper_type,
             num_grasps=self.config.graspgen_num_grasps,
             topk_num_grasps=self.config.graspgen_topk_num_grasps,
+            grasp_threshold=self.config.graspgen_grasp_threshold,
+            filter_collisions=self.config.graspgen_filter_collisions,
+            save_visualization_data=self.config.graspgen_save_visualization_data,
+            visualization_output_path=self.config.graspgen_visualization_output_path,
         )
         self._graspgen.start()
         return self._graspgen
