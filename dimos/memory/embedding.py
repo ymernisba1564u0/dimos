@@ -20,14 +20,14 @@ import reactivex as rx
 from reactivex import operators as ops
 from reactivex.observable import Observable
 
-from dimos.core import In, Module, ModuleConfig, Out, rpc
+from dimos.core import In, Module, ModuleConfig, rpc
 from dimos.models.embedding.base import Embedding, EmbeddingModel
 from dimos.models.embedding.clip import CLIPModel
 from dimos.msgs.geometry_msgs import PoseStamped
 from dimos.msgs.nav_msgs import OccupancyGrid
 from dimos.msgs.sensor_msgs import Image
 from dimos.msgs.sensor_msgs.Image import Image, sharpness_barrier
-from dimos.utils.reactive import backpressure, getter_hot
+from dimos.utils.reactive import getter_hot
 
 
 @dataclass

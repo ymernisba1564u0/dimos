@@ -14,10 +14,7 @@
 
 from __future__ import annotations
 
-from operator import add, sub
-
 import pytest
-import reactivex.operators as ops
 
 from dimos.robot.unitree_webrtc.type.odometry import Odometry
 from dimos.utils.testing import SensorReplay
