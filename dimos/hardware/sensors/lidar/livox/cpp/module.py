@@ -83,13 +83,6 @@ class Mid360CppModule(NativeModule, perception.Lidar, perception.IMU):
     pointcloud: Out[PointCloud2]
     imu: Out[Imu]
 
-    def _collect_topics(self) -> dict[str, str]:
-        cfg: Mid360CppConfig = self.config  # type: ignore[assignment]
-        topics = super()._collect_topics()
-        if not cfg.enable_imu:
-            topics.pop("imu", None)
-        return topics
-
     def _build_extra_args(self) -> list[str]:
         """Pass hardware config to the C++ binary as CLI args."""
         cfg: Mid360CppConfig = self.config  # type: ignore[assignment]
