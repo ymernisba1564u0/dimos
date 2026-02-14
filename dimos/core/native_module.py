@@ -42,6 +42,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
 import enum
+import inspect
 import json
 import os
 from pathlib import Path
@@ -67,9 +68,10 @@ class NativeModuleConfig(ModuleConfig):
     """Configuration for a native (C/C++) subprocess module."""
 
     executable: str
+    build_command: str | None = None
+    cwd: str | None = None
     extra_args: list[str] = field(default_factory=list)
     extra_env: dict[str, str] = field(default_factory=dict)
-    cwd: str | None = None
     shutdown_timeout: float = 10.0
     log_format: LogFormat = LogFormat.TEXT
 
@@ -125,12 +127,15 @@ class NativeModule(Module[NativeModuleConfig]):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._io_threads = []
+        self._resolve_paths()
 
     @rpc
     def start(self) -> None:
         if self._process is not None and self._process.poll() is None:
             logger.warning("Native process already running", pid=self._process.pid)
             return
+
+        self._maybe_build()
 
         topics = self._collect_topics()
 
@@ -222,6 +227,52 @@ class NativeModule(Module[NativeModuleConfig]):
                     logger.warning("malformed JSON from native module", raw=line)
             log_fn(line, pid=self._process.pid if self._process else None)
         stream.close()
+
+    def _resolve_paths(self) -> None:
+        """Resolve relative ``cwd`` and ``executable`` against the subclass's source file."""
+        if self.config.cwd is not None and not Path(self.config.cwd).is_absolute():
+            source_file = inspect.getfile(type(self))
+            base_dir = Path(source_file).resolve().parent
+            self.config.cwd = str(base_dir / self.config.cwd)
+        if not Path(self.config.executable).is_absolute() and self.config.cwd is not None:
+            self.config.executable = str(Path(self.config.cwd) / self.config.executable)
+
+    def _maybe_build(self) -> None:
+        """Run ``build_command`` if the executable does not exist."""
+        exe = Path(self.config.executable)
+        if exe.exists():
+            return
+        if self.config.build_command is None:
+            raise FileNotFoundError(
+                f"Executable not found: {exe}. "
+                "Set build_command in config to auto-build, or build it manually."
+            )
+        logger.info(
+            "Executable not found, running build",
+            executable=str(exe),
+            build_command=self.config.build_command,
+        )
+        proc = subprocess.Popen(
+            self.config.build_command,
+            shell=True,
+            cwd=self.config.cwd,
+            env={**os.environ, **self.config.extra_env},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        stdout_reader = self._start_reader(proc.stdout, "info")
+        stderr_reader = self._start_reader(proc.stderr, "warning")
+        proc.wait()
+        stdout_reader.join(timeout=2)
+        stderr_reader.join(timeout=2)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"Build command failed (exit {proc.returncode}): {self.config.build_command}"
+            )
+        if not exe.exists():
+            raise FileNotFoundError(
+                f"Build command succeeded but executable still not found: {exe}"
+            )
 
     def _collect_topics(self) -> dict[str, str]:
         """Extract LCM topic strings from blueprint-assigned stream transports."""

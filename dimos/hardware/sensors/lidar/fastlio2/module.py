@@ -51,7 +51,6 @@ from dimos.msgs.nav_msgs.Odometry import Odometry  # noqa: TC001
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2  # noqa: TC001
 from dimos.spec import mapping, perception
 
-_DEFAULT_EXECUTABLE = str(Path(__file__).parent / "cpp" / "result" / "bin" / "fastlio2_native")
 _CONFIG_DIR = Path(__file__).parent / "config"
 
 
@@ -59,7 +58,9 @@ _CONFIG_DIR = Path(__file__).parent / "config"
 class FastLio2Config(NativeModuleConfig):
     """Config for the FAST-LIO2 + Livox Mid-360 native module."""
 
-    executable: str = _DEFAULT_EXECUTABLE
+    cwd: str | None = "cpp"
+    executable: str = "result/bin/fastlio2_native"
+    build_command: str | None = "nix build .#fastlio2_native"
 
     # Livox SDK hardware config
     host_ip: str = "192.168.1.5"

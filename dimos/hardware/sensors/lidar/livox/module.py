@@ -27,7 +27,6 @@ Usage::
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from dimos.core import Out  # noqa: TC001
 from dimos.core.native_module import NativeModule, NativeModuleConfig
@@ -47,14 +46,15 @@ from dimos.msgs.sensor_msgs.Imu import Imu  # noqa: TC001
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2  # noqa: TC001
 from dimos.spec import perception
 
-_DEFAULT_EXECUTABLE = str(Path(__file__).parent / "cpp" / "result" / "bin" / "mid360_native")
-
 
 @dataclass(kw_only=True)
 class Mid360Config(NativeModuleConfig):
     """Config for the C++ Mid-360 native module."""
 
-    executable: str = _DEFAULT_EXECUTABLE
+    cwd: str | None = "cpp"
+    executable: str = "result/bin/mid360_native"
+    build_command: str | None = "nix build .#mid360_native"
+
     host_ip: str = "192.168.1.5"
     lidar_ip: str = "192.168.1.155"
     frequency: float = 10.0
