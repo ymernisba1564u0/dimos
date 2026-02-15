@@ -25,24 +25,28 @@
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="assets/readme/nav.png" alt="Navigation" width="100%"><br>
+      <img src="assets/readme/nav.png" alt="Navigation" width="100%">
+      <hr>
       <h3>Nav</h3>
       <p>ros and non ros · <a href="#">▶ Watch video</a></p>
     </td>
     <td align="center" width="50%">
-      <img src="assets/readme/detections.png" alt="Det" width="100%"><br>
+      <img src="assets/readme/detections.png" alt="Det" width="100%">
+      <hr>
       <h3>Perception</h3>
       <p>bla bla perception · <a href="#">▶ Watch video</a></p>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="assets/readme/lidar.png" alt="Mapping" width="100%"><br>
+      <img src="assets/readme/lidar.png" alt="Mapping" width="100%">
+      <hr>
       <h3>Mapping</h3>
       <p>Voxels · <a href="#">▶ Watch video</a></p>
     </td>
     <td align="center" width="50%">
-      <img src="assets/readme/agents.png" alt="Agents" width="100%"><br>
+      <img src="assets/readme/agents.png" alt="Agents" width="100%">
+      <hr>
       <h3>Agents integration</h3>
       <p>bla bla MCP · <a href="https://x.com/lesh_bla/status/2014904935088062503">▶ Watch video</a></p>
     </td>
