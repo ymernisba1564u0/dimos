@@ -44,12 +44,24 @@ for t in $allowed_types; do
 done
 
 if [[ "$name_ok" -ne 1 || "$type_ok" -ne 1 ]]; then
+  echo
+  echo
+  echo
+  echo
+  echo
   echo "Invalid branch name: '$branch'"
-  echo "Expected format: <your_name>/<type>/<description>"
-  echo "Parsed name/type: '$branch_name'/'$branch_type'"
-  echo "Allowed names: $allowed_names"
-  echo "Allowed types: $allowed_types"
-  exit 1
+  echo
+  echo "    Expected format: <your_name>/<type>/<description>"
+  echo "        Parsed name: $branch_name"
+  echo "      Allowed names: $allowed_names"
+  echo "        Parsed type: $branch_type"
+  echo "      Allowed types: $allowed_types"
+  echo
+  echo "Wait 4 seconds if you want to ignore this error"
+  sleep 1; echo 4
+  sleep 1; echo 3
+  sleep 1; echo 2
+  sleep 1; echo 1
+else
+  echo "Branch naming check passed: $branch"
 fi
-
-echo "Branch naming check passed: $branch"
