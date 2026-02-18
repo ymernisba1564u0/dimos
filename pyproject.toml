@@ -172,7 +172,7 @@ unitree = [
 manipulation = [
     # Planning (Drake)
     "drake==1.45.0; sys_platform == 'darwin' and platform_machine != 'aarch64'",
-    "drake==1.40.0; sys_platform != 'darwin' and platform_machine != 'aarch64'",
+    "drake>=1.40.0; sys_platform != 'darwin' and platform_machine != 'aarch64'",
 
     # Hardware SDKs
     "piper-sdk",
@@ -356,6 +356,7 @@ module = [
     "dimos_lcm.*",
     "etils",
     "geometry_msgs.*",
+    "lazy_loader",
     "mujoco",
     "mujoco_playground.*",
     "nav_msgs.*",
@@ -414,4 +415,5 @@ ignore = [
     "*/package-lock.json",
     "dimos/dashboard/dimos.rbl",
     "dimos/web/dimos_interface/themes.json",
+    "dimos/manipulation/manipulation_module.py",
 ]

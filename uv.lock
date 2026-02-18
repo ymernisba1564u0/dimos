@@ -2078,7 +2078,7 @@ requires-dist = [
     { name = "dimos-lcm" },
     { name = "dimos-lcm", marker = "extra == 'docker'" },
     { name = "drake", marker = "platform_machine != 'aarch64' and sys_platform == 'darwin' and extra == 'manipulation'", specifier = "==1.45.0" },
-    { name = "drake", marker = "platform_machine != 'aarch64' and sys_platform != 'darwin' and extra == 'manipulation'", specifier = "==1.40.0" },
+    { name = "drake", marker = "platform_machine != 'aarch64' and sys_platform != 'darwin' and extra == 'manipulation'", specifier = ">=1.40.0" },
     { name = "edgetam-dimos", marker = "extra == 'misc'" },
     { name = "einops", marker = "extra == 'misc'", specifier = "==0.8.1" },
     { name = "empy", marker = "extra == 'misc'", specifier = "==3.3.4" },
