@@ -117,7 +117,18 @@ echo ""
 
 cd ../..
 
-docker compose -f docker/navigation/docker-compose.yml build
+# Detect host architecture and pass it as a build arg so the Dockerfile's
+# base-${TARGETARCH} stage resolves correctly (the standard docker builder
+# does not set TARGETARCH automatically without --platform).
+HOST_ARCH=$(uname -m)
+case "$HOST_ARCH" in
+    x86_64)  TARGETARCH="amd64" ;;
+    aarch64|arm64) TARGETARCH="arm64" ;;
+    *)       TARGETARCH="$HOST_ARCH" ;;
+esac
+echo -e "${GREEN}Detected architecture: ${HOST_ARCH} → TARGETARCH=${TARGETARCH}${NC}"
+
+docker compose -f docker/navigation/docker-compose.yml build --build-arg TARGETARCH="$TARGETARCH"
 
 echo ""
 echo -e "${GREEN}============================================${NC}"
