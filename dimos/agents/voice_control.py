@@ -14,13 +14,13 @@
 
 from dataclasses import dataclass, field
 import threading
+from typing import Literal
 
 import numpy as np
 import sounddevice as sd  # type: ignore[import-untyped]
 import whisper  # type: ignore[import-untyped]
 
 from dimos.agents.skills import SpeakSkill
-from dimos.agents.system_prompt import SYSTEM_PROMPT
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
 from dimos.core.stream import Out
@@ -31,10 +31,22 @@ logger = setup_logger()
 
 @dataclass
 class VoiceConfig(ModuleConfig):
-    system_prompt: str | None = SYSTEM_PROMPT
-    model: str = "gpt-4o"
-    model_fixture: str | None = None
-    stt_model: str = "base"  # whisper model size: tiny, base, small, medium, large
+    stt_model: Literal[
+        "tiny.en",
+        "tiny",
+        "base.en",
+        "base",
+        "small.en",
+        "small",
+        "medium.en",
+        "medium",
+        "large-v1",
+        "large-v2",
+        "large-v3",
+        "large",
+        "large-v3-turbo",
+        "turbo",
+    ] = "base"
     wake_words: list[str] = field(default_factory=lambda: ["hey robot", "okay robot", "hay robot"])
     wake_silence_cutoff: float = 0.8  # seconds of silence before checking for wake word
     silence_duration: float = 5.0  # seconds of silence that ends a command recording
