@@ -20,7 +20,10 @@ from functools import cached_property, reduce
 import operator
 import sys
 from types import MappingProxyType
-from typing import Any, Literal, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin, get_type_hints
+
+if TYPE_CHECKING:
+    from dimos.protocol.service.system_configurator.base import SystemConfigurator
 
 from dimos.core.global_config import GlobalConfig, global_config
 from dimos.core.module import Module, ModuleBase, ModuleSpec, is_module_type
@@ -109,6 +112,7 @@ class Blueprint:
         field(default_factory=lambda: MappingProxyType({}))
     )
     requirement_checks: tuple[Callable[[], str | None], ...] = field(default_factory=tuple)
+    configurator_checks: "tuple[SystemConfigurator, ...]" = field(default_factory=tuple)
 
     @classmethod
     def create(cls, module: type[ModuleBase], **kwargs: Any) -> "Blueprint":
@@ -122,6 +126,7 @@ class Blueprint:
             global_config_overrides=self.global_config_overrides,
             remapping_map=self.remapping_map,
             requirement_checks=self.requirement_checks,
+            configurator_checks=self.configurator_checks,
         )
 
     def global_config(self, **kwargs: Any) -> "Blueprint":
@@ -131,6 +136,7 @@ class Blueprint:
             global_config_overrides=MappingProxyType({**self.global_config_overrides, **kwargs}),
             remapping_map=self.remapping_map,
             requirement_checks=self.requirement_checks,
+            configurator_checks=self.configurator_checks,
         )
 
     def remappings(
@@ -149,6 +155,7 @@ class Blueprint:
             global_config_overrides=self.global_config_overrides,
             remapping_map=MappingProxyType(remappings_dict),
             requirement_checks=self.requirement_checks,
+            configurator_checks=self.configurator_checks,
         )
 
     def requirements(self, *checks: Callable[[], str | None]) -> "Blueprint":
@@ -158,6 +165,17 @@ class Blueprint:
             global_config_overrides=self.global_config_overrides,
             remapping_map=self.remapping_map,
             requirement_checks=self.requirement_checks + tuple(checks),
+            configurator_checks=self.configurator_checks,
+        )
+
+    def configurators(self, *checks: "SystemConfigurator") -> "Blueprint":
+        return Blueprint(
+            blueprints=self.blueprints,
+            transport_map=self.transport_map,
+            global_config_overrides=self.global_config_overrides,
+            remapping_map=self.remapping_map,
+            requirement_checks=self.requirement_checks,
+            configurator_checks=self.configurator_checks + tuple(checks),
         )
 
     def _check_ambiguity(
@@ -204,6 +222,21 @@ class Blueprint:
 
     def _is_name_unique(self, name: str) -> bool:
         return sum(1 for n, _ in self._all_name_types if n == name) == 1
+
+    def _run_configurators(self) -> None:
+        from dimos.protocol.service.system_configurator import configure_system, lcm_configurators
+
+        configurators = [*lcm_configurators(), *self.configurator_checks]
+
+        try:
+            configure_system(configurators)
+        except SystemExit:
+            labels = [type(c).__name__ for c in configurators]
+            print(
+                f"Required system configuration was declined: {', '.join(labels)}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     def _check_requirements(self) -> None:
         errors = []
@@ -460,6 +493,7 @@ class Blueprint:
         if cli_config_overrides:
             global_config.update(**dict(cli_config_overrides))
 
+        self._run_configurators()
         self._check_requirements()
         self._verify_no_name_conflicts()
 
@@ -489,6 +523,7 @@ def autoconnect(*blueprints: Blueprint) -> Blueprint:
         reduce(operator.iadd, [list(x.remapping_map.items()) for x in blueprints], [])
     )
     all_requirement_checks = tuple(check for bs in blueprints for check in bs.requirement_checks)
+    all_configurator_checks = tuple(check for bs in blueprints for check in bs.configurator_checks)
 
     return Blueprint(
         blueprints=all_blueprints,
@@ -496,6 +531,7 @@ def autoconnect(*blueprints: Blueprint) -> Blueprint:
         global_config_overrides=MappingProxyType(all_config_overrides),
         remapping_map=MappingProxyType(all_remappings),
         requirement_checks=all_requirement_checks,
+        configurator_checks=all_configurator_checks,
     )
 
 
