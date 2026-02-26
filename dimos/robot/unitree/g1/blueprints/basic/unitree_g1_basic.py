@@ -17,7 +17,6 @@
 
 from dimos.core.blueprints import autoconnect
 from dimos.navigation.rosnav import ros_nav
-from dimos.protocol.service.system_configurator import ClockSyncConfigurator
 from dimos.robot.unitree.g1.blueprints.primitive.uintree_g1_primitive_no_nav import (
     uintree_g1_primitive_no_nav,
 )
@@ -27,6 +26,6 @@ unitree_g1_basic = autoconnect(
     uintree_g1_primitive_no_nav,
     g1_connection(),
     ros_nav(),
-).configurators(ClockSyncConfigurator())
+)
 
 __all__ = ["unitree_g1_basic"]
