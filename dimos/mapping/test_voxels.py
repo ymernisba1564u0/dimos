@@ -77,6 +77,7 @@ def two_perspectives_loop(moment: MomentFactory) -> None:
         time.sleep(1)
 
 
+@pytest.mark.tool
 def test_carving(
     mapper: VoxelGridMapper, moment1: Go2MapperMoment, moment2: Go2MapperMoment
 ) -> None:
