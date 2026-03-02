@@ -699,51 +699,80 @@ run_post_install_tests() {
     local venv="${dir}/.venv/bin/activate"
     [[ ! -f "$venv" ]] && { warn "venv not found, skipping tests"; return; }
 
+    # Check if there's anything to test
+    local has_tests=0
+    [[ "$INSTALL_MODE" == "dev" ]] && has_tests=1
+    { [[ "$EXTRAS" == *"unitree"* ]] || [[ "$EXTRAS" == "all" ]]; } && has_tests=1
+
+    if [[ "$has_tests" == "0" ]]; then
+        dim "  no verification tests available for selected extras"
+        return
+    fi
+
     if ! prompt_confirm "Run post-install verification tests?" "yes"; then
         dim "  skipping tests"
         return
     fi
 
-    printf "\n"; info "${BOLD}running post-install verification...${RESET}"; printf "\n"
-    local failures=0
+    printf "\n"; info "${BOLD}post-install verification${RESET}"; printf "\n"
+    local failures=0 ran=0
 
-    # pytest (dev mode only) — uses pyproject.toml markers to run fast suite
+    # pytest (dev mode only)
     if [[ "$INSTALL_MODE" == "dev" ]]; then
-        info "running fast test suite (uv run pytest dimos)..."
+        info "running: ${DIM}uv run pytest dimos${RESET} (fast test suite from pyproject.toml)"
         local exit_code=0
         if [[ "$USE_NIX" == "1" ]]; then
             (cd "$dir" && nix develop --command bash -c "source .venv/bin/activate && uv run pytest dimos 2>&1 | tail -20") || exit_code=$?
         else
             (cd "$dir" && source "$venv" && uv run pytest dimos 2>&1 | tail -20) || exit_code=$?
         fi
+        ((ran++))
         [[ $exit_code -eq 0 ]] && ok "pytest passed ✓" || { warn "pytest: some tests failed"; ((failures++)) || true; }
     fi
 
-    # replay verification — only if unitree extras were installed
+    # simulation or replay — only if unitree extras installed
     if [[ "$EXTRAS" == *"unitree"* ]] || [[ "$EXTRAS" == "all" ]]; then
-        info "replay verification (unitree-go2, 30s timeout)..."
-        local log; log=$(mktemp /tmp/dimos-replay-XXXXXX.log)
-        local exit_code=0
-        if [[ "$USE_NIX" == "1" ]]; then
-            (cd "$dir" && nix develop --command bash -c "source .venv/bin/activate && timeout 30 dimos --replay run unitree-go2") >"$log" 2>&1 || exit_code=$?
+        if [[ "$EXTRAS" == *"sim"* ]] || [[ "$EXTRAS" == "all" ]]; then
+            info "running: ${DIM}dimos --simulation run unitree-go2${RESET} (MuJoCo simulation, 30s)"
+            local log; log=$(mktemp /tmp/dimos-sim-XXXXXX.log)
+            local exit_code=0
+            if [[ "$USE_NIX" == "1" ]]; then
+                (cd "$dir" && nix develop --command bash -c "source .venv/bin/activate && timeout 30 dimos --simulation run unitree-go2") >"$log" 2>&1 || exit_code=$?
+            else
+                (cd "$dir" && source "$venv" && timeout 30 dimos --simulation run unitree-go2) >"$log" 2>&1 || exit_code=$?
+            fi
         else
-            (cd "$dir" && source "$venv" && timeout 30 dimos --replay run unitree-go2) >"$log" 2>&1 || exit_code=$?
+            info "running: ${DIM}dimos --replay run unitree-go2${RESET} (replay mode, 30s)"
+            local log; log=$(mktemp /tmp/dimos-replay-XXXXXX.log)
+            local exit_code=0
+            if [[ "$USE_NIX" == "1" ]]; then
+                (cd "$dir" && nix develop --command bash -c "source .venv/bin/activate && timeout 30 dimos --replay run unitree-go2") >"$log" 2>&1 || exit_code=$?
+            else
+                (cd "$dir" && source "$venv" && timeout 30 dimos --replay run unitree-go2) >"$log" 2>&1 || exit_code=$?
+            fi
         fi
 
-        if [[ $exit_code -eq 124 ]]; then ok "replay: ran 30s without crash ✓"
-        elif [[ $exit_code -eq 0 ]]; then ok "replay: completed ✓"
+        ((ran++))
+        if [[ $exit_code -eq 124 ]]; then ok "unitree-go2: ran 30s without crash ✓"
+        elif [[ $exit_code -eq 0 ]]; then ok "unitree-go2: completed ✓"
         else
             if grep -qi "Traceback\|ModuleNotFoundError\|ImportError" "$log" 2>/dev/null; then
-                warn "replay failed (exit ${exit_code})"; tail -5 "$log" | while IFS= read -r l; do dim "    $l"; done; ((failures++)) || true
+                warn "unitree-go2 failed (exit ${exit_code})"; tail -5 "$log" | while IFS= read -r l; do dim "    $l"; done; ((failures++)) || true
             else
-                warn "replay exited with code ${exit_code} (may be expected headless)"
+                warn "unitree-go2 exited with code ${exit_code} (may be expected headless)"
             fi
         fi
         rm -f "$log"
     fi
 
     printf "\n"
-    [[ $failures -eq 0 ]] && ok "${BOLD}all checks passed${RESET} 🎉" || warn "${failures} check(s) had issues"
+    if [[ $ran -eq 0 ]]; then
+        dim "  no tests were run"
+    elif [[ $failures -eq 0 ]]; then
+        ok "${BOLD}${ran} check(s) passed${RESET} 🎉"
+    else
+        warn "${failures}/${ran} check(s) had issues"
+    fi
 }
 
 # ─── quickstart ───────────────────────────────────────────────────────────────
