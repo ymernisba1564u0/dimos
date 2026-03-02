@@ -157,7 +157,15 @@ DimOS has been tested and validated on the following hardware configurations:
 
 # Installation
 
-## System Install
+## Interactive Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/dimensionalOS/dimos/dev/scripts/install.sh | bash
+```
+
+> See [`scripts/install.sh --help`](scripts/install.sh) for non-interactive and advanced options.
+
+## Manual System Install
 
 To set up your system dependencies, follow one of these guides:
 
@@ -283,14 +291,6 @@ if __name__ == "__main__":
 <img src="assets/readme/dimos_demo.gif" alt="DimOS Demo" width="100%">
 
 # Development
-
-## Interactive Install
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/dimensionalOS/dimos/dev/scripts/install.sh | bash
-```
-
-> See [`scripts/install.sh --help`](scripts/install.sh) for non-interactive and advanced options.
 
 ## Develop on DimOS
 
