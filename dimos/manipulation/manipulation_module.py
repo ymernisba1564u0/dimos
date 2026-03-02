@@ -24,7 +24,7 @@ Subclass PickAndPlaceModule (pick_and_place_module.py) adds perception integrati
 
 from __future__ import annotations
 
-from dataclasses import field
+from collections.abc import Iterable
 from enum import Enum
 import threading
 import time
@@ -86,7 +86,7 @@ class ManipulationState(Enum):
 class ManipulationModuleConfig(ModuleConfig):
     """Configuration for ManipulationModule."""
 
-    robots: list[RobotModelConfig] = field(default_factory=list)
+    robots: Iterable[RobotModelConfig] = ()
     planning_timeout: float = 10.0
     enable_viz: bool = False
     planner_name: str = "rrt_connect"  # "rrt_connect"

@@ -95,7 +95,7 @@ def create_worker_manager():
 @pytest.mark.slow
 def test_worker_manager_basic(create_worker_manager):
     worker_manager = create_worker_manager(n_workers=2)
-    module = worker_manager.deploy(SimpleModule)
+    module = worker_manager.deploy(SimpleModule, global_config, {})
     module.start()
 
     result = module.increment()
@@ -169,8 +169,8 @@ def test_worker_manager_parallel_deployment(create_worker_manager):
 @pytest.mark.slow
 def test_worker_pool_modules_share_workers(create_worker_manager):
     manager = create_worker_manager(n_workers=1)
-    module1 = manager.deploy(SimpleModule)
-    module2 = manager.deploy(AnotherModule)
+    module1 = manager.deploy(SimpleModule, global_config, {})
+    module2 = manager.deploy(AnotherModule, global_config, {})
 
     module1.start()
     module2.start()

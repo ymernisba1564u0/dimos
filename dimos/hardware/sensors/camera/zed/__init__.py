@@ -29,12 +29,33 @@ except ImportError:
 
 if HAS_ZED_SDK:
     from dimos.hardware.sensors.camera.zed.camera import ZEDCamera, ZEDModule, zed_camera
+else:
+    # Provide stub classes when SDK is not available
+    class ZEDCamera:  # type: ignore[no-redef]
+        def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+            raise ImportError(
+                "ZED SDK not installed. Please install pyzed package to use ZED camera functionality."
+            )
+
+    class ZEDModule:  # type: ignore[no-redef]
+        def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+            raise ImportError(
+                "ZED SDK not installed. Please install pyzed package to use ZED camera functionality."
+            )
+
+    def zed_camera(*args: object, **kwargs: object) -> None:  # type: ignore[misc,no-redef]
+        raise ModuleNotFoundError(
+            "ZED SDK not installed. Please install pyzed package to use ZED camera functionality.",
+            name="pyzed",
+        )
+
 
 # Set up camera calibration provider (always available)
 CALIBRATION_DIR = Path(__file__).parent
 CameraInfo = CalibrationProvider(CALIBRATION_DIR)
 
 __all__ = [
+    "HAS_ZED_SDK",
     "CameraInfo",
     "ZEDCamera",
     "ZEDModule",
