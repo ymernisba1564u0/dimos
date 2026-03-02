@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Basic G1 sim stack with ROS nav: sim connection and ROS navigation stack."""
+"""G1 hardware stack with ROS nav: real robot connection and ROS navigation stack."""
 
 from dimos.core.blueprints import autoconnect
 from dimos.navigation.rosnav_docker import ros_nav
@@ -21,9 +21,23 @@ from dimos.robot.unitree.g1.blueprints.primitive.unitree_g1_primitive_no_cam imp
     unitree_g1_primitive_no_cam,
 )
 
+# G1 EDU hardware defaults.  Override by calling ros_nav(...) directly.
+# lidar_interface: ethernet port connected to the robot/lidar (Jetson Orin: "eth0")
+# lidar subnet: 192.168.123.x — internal G1 EDU network
+# unitree_ip: G1 LocalAP WiFi address (used when robot runs its own access point)
 unitree_g1_basic_ros = autoconnect(
     unitree_g1_primitive_no_cam,
-    ros_nav(mode="hardware"),
+    ros_nav(
+        mode="hardware",
+        robot_config_path="unitree/unitree_g1",
+        lidar_interface="eth0",
+        lidar_computer_ip="192.168.123.5",
+        lidar_gateway="192.168.123.1",
+        lidar_ip="192.168.123.120",
+        unitree_ip="192.168.12.1",
+        unitree_conn="LocalAP",
+        enable_wifi_buffer=True,
+    ),
 )
 
 __all__ = ["unitree_g1_basic_ros"]

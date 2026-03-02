@@ -354,13 +354,85 @@ if [ "$MODE" = "simulation" ]; then
     fi
     start_unity
     launch_with_retry
-elif [ "$MODE" = "hardware" ]; then 
+elif [ "$MODE" = "hardware" ]; then
     if [ "$USE_ROUTE_PLANNER" = "true" ]; then
         LAUNCH_FILE="system_real_robot_with_route_planner.launch.py"
     else
         LAUNCH_FILE="system_real_robot.launch.py"
     fi
+
+    # --- Hardware sensor / network setup ---
+
+    # Tune kernel TCP buffers for high-bandwidth WiFi transmission
+    if [ "${ENABLE_WIFI_BUFFER:-false}" = "true" ]; then
+        echo "[entrypoint] Tuning WiFi TCP buffers..."
+        sysctl -w net.core.rmem_max=67108864 net.core.rmem_default=67108864 2>/dev/null || true
+        sysctl -w net.core.wmem_max=67108864 net.core.wmem_default=67108864 2>/dev/null || true
+    fi
+
+    # Assign static IP to the ethernet interface connected to the Mid-360 lidar
+    if [ -n "${LIDAR_INTERFACE}" ] && [ -n "${LIDAR_COMPUTER_IP}" ]; then
+        echo "[entrypoint] Configuring ${LIDAR_INTERFACE} for Mid-360 lidar (IP: ${LIDAR_COMPUTER_IP})..."
+        ip addr add "${LIDAR_COMPUTER_IP}/24" dev "${LIDAR_INTERFACE}" 2>/dev/null || true
+        ip link set "${LIDAR_INTERFACE}" up 2>/dev/null || true
+    fi
+
+    # Generate MID360_config.json so the Livox driver knows where to listen
+    if [ -n "${LIDAR_COMPUTER_IP}" ] && [ -n "${LIDAR_IP}" ]; then
+        MID360_SRC="${STACK_ROOT}/src/utilities/livox_ros_driver2/config/MID360_config.json"
+        MID360_INST="/ros2_ws/install/livox_ros_driver2/share/livox_ros_driver2/config/MID360_config.json"
+        echo "[entrypoint] Generating MID360_config.json (lidar=${LIDAR_IP}, host=${LIDAR_COMPUTER_IP})..."
+        cat > "${MID360_SRC}" <<EOF
+{
+  "lidar_summary_info": { "lidar_type": 8 },
+  "MID360": {
+    "lidar_net_info": {
+      "cmd_data_port": 56100, "push_msg_port": 56200,
+      "point_data_port": 56300, "imu_data_port": 56400, "log_data_port": 56500
+    },
+    "host_net_info": {
+      "cmd_data_ip": "${LIDAR_COMPUTER_IP}", "cmd_data_port": 56101,
+      "push_msg_ip": "${LIDAR_COMPUTER_IP}", "push_msg_port": 56201,
+      "point_data_ip": "${LIDAR_COMPUTER_IP}", "point_data_port": 56301,
+      "imu_data_ip": "${LIDAR_COMPUTER_IP}", "imu_data_port": 56401,
+      "log_data_ip": "${LIDAR_COMPUTER_IP}", "log_data_port": 56501
+    }
+  },
+  "lidar_configs": [{
+    "ip": "${LIDAR_IP}", "pcl_data_type": 1, "pattern_mode": 0,
+    "extrinsic_parameter": { "roll": 0.0, "pitch": 0.0, "yaw": 0.0, "x": 0, "y": 0, "z": 0 }
+  }]
+}
+EOF
+        cp "${MID360_SRC}" "${MID360_INST}" 2>/dev/null || true
+    fi
+
     start_ros_nav_stack
+
+    # Start Unitree WebRTC control bridge (subscribes /cmd_vel, enables robot control).
+    # This is required for the robot connection; also publishes robot state to ROS.
+    if [[ "${ROBOT_CONFIG_PATH:-}" == *"unitree"* ]]; then
+        echo "[entrypoint] Starting Unitree WebRTC control (IP: ${UNITREE_IP:-192.168.12.1}, Method: ${UNITREE_CONN:-LocalAP})..."
+        ros2 launch unitree_webrtc_ros unitree_control.launch.py \
+            robot_ip:="${UNITREE_IP:-192.168.12.1}" \
+            connection_method:="${UNITREE_CONN:-LocalAP}" &
+    fi
+
+    # Start twist relay: converts /foxglove_teleop Twist → /cmd_vel TwistStamped
+    if [ -f "/usr/local/bin/twist_relay.py" ]; then
+        echo "[entrypoint] Starting Twist relay..."
+        python3 /usr/local/bin/twist_relay.py &
+    fi
+
+    # Start goal autonomy relay: publishes Joy to enable autonomy when goal_pose received
+    if [ -f "/usr/local/bin/goal_autonomy_relay.py" ]; then
+        echo "[entrypoint] Starting Goal Autonomy relay..."
+        python3 /usr/local/bin/goal_autonomy_relay.py &
+    fi
+
+    # Start Foxglove Bridge for remote monitoring / teleop
+    echo "[entrypoint] Starting Foxglove Bridge on port 8765..."
+    ros2 launch foxglove_bridge foxglove_bridge_launch.xml port:=8765 &
 elif [ "$MODE" = "bagfile" ]; then 
     if [ "$USE_ROUTE_PLANNER" = "true" ]; then
         LAUNCH_FILE="system_bagfile_with_route_planner.launch.py"

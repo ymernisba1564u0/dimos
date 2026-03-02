@@ -127,7 +127,6 @@ class ROSNavConfig(DockerModuleConfig):
             "QT_X11_NO_MITSHM": "1",
             "NVIDIA_VISIBLE_DEVICES": "all",
             "NVIDIA_DRIVER_CAPABILITIES": "all",
-            "HARDWARE_MODE": "false",
             # Give DDS topic discovery enough time after Unity registers publishers.
             # Default in the entrypoint is 25s which is too short on some machines.
             "UNITY_BRIDGE_CONNECT_TIMEOUT_SEC": "60",
@@ -160,11 +159,41 @@ class ROSNavConfig(DockerModuleConfig):
     #   (mirrors the unconditional RViz launch in run_both.sh for simulation)
     use_rviz: bool = False
 
+    # --- Hardware sensor / network settings (used when mode="hardware") ---
+    # lidar_interface: host ethernet interface connected to Mid-360 lidar (e.g. "eth0")
+    # lidar_computer_ip: IP to assign/use on that interface for lidar communication
+    # lidar_gateway: gateway IP for the lidar subnet
+    # lidar_ip: IP address of the Mid-360 lidar device itself
+    # unitree_ip: Unitree robot IP for WebRTC connection
+    # unitree_conn: WebRTC connection method — "LocalAP", "LocalSTA", or "Remote"
+    # enable_wifi_buffer: tune kernel TCP buffers for high-bandwidth WiFi transmission
+    lidar_interface: str = ""
+    lidar_computer_ip: str = ""
+    lidar_gateway: str = ""
+    lidar_ip: str = ""
+    unitree_ip: str = "192.168.12.1"
+    unitree_conn: str = "LocalAP"
+    enable_wifi_buffer: bool = False
+
     def __post_init__(self) -> None:
         import os
 
         effective_mode = "bagfile" if self.bagfile_path else self.mode
         self.docker_env["MODE"] = effective_mode
+
+        # Hardware sensor env vars — read by dimos_module_entrypoint.sh when MODE=hardware.
+        is_hardware = effective_mode == "hardware"
+        if is_hardware:
+            # Privileged mode is required for ip link/ip addr and sysctl inside the container.
+            self.docker_privileged = True
+            self.docker_env["LIDAR_INTERFACE"] = self.lidar_interface
+            self.docker_env["LIDAR_COMPUTER_IP"] = self.lidar_computer_ip
+            self.docker_env["LIDAR_GATEWAY"] = self.lidar_gateway
+            self.docker_env["LIDAR_IP"] = self.lidar_ip
+            self.docker_env["UNITREE_IP"] = self.unitree_ip
+            self.docker_env["UNITREE_CONN"] = self.unitree_conn
+            self.docker_env["ENABLE_WIFI_BUFFER"] = "true" if self.enable_wifi_buffer else "false"
+
         if self.bagfile_path:
             bag_path = Path(self.bagfile_path).expanduser()
             if bag_path.exists():
