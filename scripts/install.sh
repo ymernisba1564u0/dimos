@@ -447,7 +447,7 @@ install_system_deps() {
         ubuntu|wsl)
             # Check if all packages are already installed
             local needed=""
-            local all_pkgs="curl g++ portaudio19-dev git-lfs libturbojpeg python3-dev pre-commit"
+            local all_pkgs="curl g++ portaudio19-dev git-lfs libturbojpeg python3-dev pre-commit libgl1 libegl1"
             for pkg in $all_pkgs; do
                 if ! dpkg -s "$pkg" &>/dev/null; then
                     needed+=" $pkg"
