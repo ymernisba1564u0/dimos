@@ -47,38 +47,47 @@ class LcmCodec:
 class JpegCodec:
     """Codec for Image types — stores as JPEG bytes (lossy, ~10-20x smaller).
 
+    Uses TurboJPEG (libjpeg-turbo) for 2-5x faster encode/decode vs OpenCV.
     Preserves ``frame_id`` as a short header: ``<len_u16><frame_id_utf8><jpeg_bytes>``.
     Pixel data is lossy-compressed; ``ts`` is NOT preserved (stored in the meta table).
     """
 
-    def __init__(self, quality: int = 90) -> None:
+    def __init__(self, quality: int = 50) -> None:
         self._quality = quality
+        from turbojpeg import TurboJPEG  # type: ignore[import-untyped]
+
+        self._tj = TurboJPEG()
+
+    _TJPF_MAP: dict[str, int] | None = None
+
+    @staticmethod
+    def _get_tjpf_map() -> dict[str, int]:
+        if JpegCodec._TJPF_MAP is None:
+            from turbojpeg import TJPF_BGR, TJPF_GRAY, TJPF_RGB  # type: ignore[import-untyped]
+
+            JpegCodec._TJPF_MAP = {"BGR": TJPF_BGR, "RGB": TJPF_RGB, "GRAY": TJPF_GRAY}
+        return JpegCodec._TJPF_MAP
 
     def encode(self, value: Any) -> bytes:
         import struct
 
-        import cv2
+        from turbojpeg import TJPF_BGR  # type: ignore[import-untyped]
 
-        bgr = value.to_opencv()
-        ok, buf = cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, self._quality])
-        if not ok:
-            raise ValueError("JPEG encoding failed")
+        pf = self._get_tjpf_map().get(value.format.value, TJPF_BGR)
+        jpeg_data = self._tj.encode(value.data, quality=self._quality, pixel_format=pf)
         frame_id = (value.frame_id or "").encode("utf-8")
         header = struct.pack("<H", len(frame_id)) + frame_id
-        return header + buf.tobytes()
+        return header + jpeg_data
 
     def decode(self, data: bytes) -> Any:
         import struct
-
-        import cv2
-        import numpy as np
 
         from dimos.msgs.sensor_msgs.Image import Image, ImageFormat
 
         fid_len = struct.unpack("<H", data[:2])[0]
         frame_id = data[2 : 2 + fid_len].decode("utf-8")
         jpeg_data = data[2 + fid_len :]
-        arr = cv2.imdecode(np.frombuffer(jpeg_data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        arr = self._tj.decode(jpeg_data)
         if arr is None:
             raise ValueError("JPEG decoding failed")
         return Image(data=arr, format=ImageFormat.BGR, frame_id=frame_id)

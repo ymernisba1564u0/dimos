@@ -376,6 +376,9 @@ class SqliteStreamBackend:
     def stream_name(self) -> str:
         return self._table
 
+    def _post_insert(self, row_id: int, payload: Any) -> None:
+        """Hook for subclasses to add extra inserts inside the transaction."""
+
     def do_append(
         self,
         payload: Any,
@@ -391,6 +394,10 @@ class SqliteStreamBackend:
 
         pose_cols = _decompose_pose(pose)
         tags_json = _serialize_tags(tags)
+
+        # Encode payload before touching the DB so a codec error can't leave
+        # a metadata row without a matching payload row.
+        payload_blob = self._codec.encode(payload)
 
         # 1. Insert into meta table
         if pose_cols is not None:
@@ -409,7 +416,6 @@ class SqliteStreamBackend:
         assert row_id is not None
 
         # 2. Insert into payload table
-        payload_blob = self._codec.encode(payload)
         self._conn.execute(
             f"INSERT INTO {self._table}_payload (id, data) VALUES (?, ?)",
             (row_id, payload_blob),
@@ -423,6 +429,9 @@ class SqliteStreamBackend:
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (row_id, x, x, y, y, z, z),
             )
+
+        # 4. Subclass hook (vec0, FTS, etc.)
+        self._post_insert(row_id, payload)
 
         self._conn.commit()
 
@@ -493,19 +502,9 @@ class SqliteEmbeddingBackend(SqliteStreamBackend):
         self._vec_dimensions = vec_dimensions
         self._parent_table = parent_table
 
-    def do_append(
-        self,
-        payload: Any,
-        ts: float | None,
-        pose: Any | None,
-        tags: dict[str, Any] | None,
-        parent_id: int | None = None,
-    ) -> Observation:
+    def _post_insert(self, row_id: int, payload: Any) -> None:
         from dimos.models.embedding.base import Embedding
 
-        obs = super().do_append(payload, ts, pose, tags, parent_id)
-
-        # Also insert into vec0 table if payload is an Embedding
         if isinstance(payload, Embedding):
             vec = payload.to_numpy().tolist()
             if self._vec_dimensions is None:
@@ -513,11 +512,8 @@ class SqliteEmbeddingBackend(SqliteStreamBackend):
                 self._ensure_vec_table()
             self._conn.execute(
                 f"INSERT INTO {self._table}_vec (rowid, embedding) VALUES (?, ?)",
-                (obs.id, json.dumps(vec)),
+                (row_id, json.dumps(vec)),
             )
-            self._conn.commit()
-
-        return obs
 
     def _ensure_vec_table(self) -> None:
         if self._vec_dimensions is None:
@@ -656,23 +652,12 @@ class SqliteTextBackend(SqliteStreamBackend):
         super().__init__(conn, table, pose_provider=pose_provider, codec=codec)
         self._tokenizer = tokenizer
 
-    def do_append(
-        self,
-        payload: Any,
-        ts: float | None,
-        pose: Any | None,
-        tags: dict[str, Any] | None,
-        parent_id: int | None = None,
-    ) -> Observation:
-        obs = super().do_append(payload, ts, pose, tags, parent_id)
-
+    def _post_insert(self, row_id: int, payload: Any) -> None:
         text = str(payload) if payload is not None else ""
         self._conn.execute(
             f"INSERT INTO {self._table}_fts (rowid, content) VALUES (?, ?)",
-            (obs.id, text),
+            (row_id, text),
         )
-        self._conn.commit()
-        return obs
 
     def execute_fetch(self, query: StreamQuery) -> list[Observation]:
         text_filter = None
@@ -1009,7 +994,7 @@ class SqliteStore(Store):
 
     def __init__(self, path: str) -> None:
         self._path = path
-        self._conn = sqlite3.connect(path)
+        self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._load_extensions()
