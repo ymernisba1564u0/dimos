@@ -372,6 +372,7 @@ module = [
     "rclpy.*",
     "sam2.*",
     "sensor_msgs.*",
+    "sqlite_vec",
     "std_msgs.*",
     "tf2_msgs.*",
     "torchreid",
