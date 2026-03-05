@@ -140,7 +140,7 @@ def _tail_logs(cfg: DockerModuleConfig, name: str, n: int = LOG_TAIL_LINES) -> s
     return out + ("\n" + err if err else "")
 
 
-def _prompt_restart(container_name: str) -> bool:
+def _prompt_reconnect(container_name: str) -> bool:
     """Ask the user whether to restart a running container.
 
     Returns True to restart, False to reuse.
@@ -152,7 +152,7 @@ def _prompt_restart(container_name: str) -> bool:
         logger.warning(
             f"Container '{container_name}' already running — restarting (non-interactive)."
         )
-        return True
+        return False
 
     print(f"\nContainer '{container_name}' is already running.")
     print("  [r] Restart  — stop the existing container and start a fresh one")
@@ -160,9 +160,9 @@ def _prompt_restart(container_name: str) -> bool:
     while True:
         choice = input("Choice [r/u]: ").strip().lower()
         if choice in ("r", "restart"):
-            return True
-        if choice in ("u", "use"):
             return False
+        if choice in ("u", "use"):
+            return True
         print("Please enter 'r' or 'u'.")
 
 
@@ -258,12 +258,14 @@ class DockerModule(ModuleProxy):
         try:
 
             cfg = self.config
+            reconnect = False
             if _is_container_running(cfg, self._container_name):
-                restart = _prompt_restart(self._container_name)
-                if restart:
+                reconnect = _prompt_reconnect(self._container_name)
+                if not reconnect:
                     _run([_docker_bin(self.config), "stop", self._container_name], timeout=DOCKER_STOP_TIMEOUT)
-                    _remove_container(cfg, self._container_name)
-
+            if not reconnect:
+                _remove_container(cfg, self._container_name)
+            
             cmd = self._build_docker_run_command()
             logger.info(f"Starting docker container: {self._container_name}")
             r = _run(cmd, timeout=DOCKER_RUN_TIMEOUT)
