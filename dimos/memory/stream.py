@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from reactivex import Observable
     from reactivex.subject import Subject
 
-    from dimos.models.embedding.base import Embedding
+    from dimos.models.embedding.base import Embedding, EmbeddingModel
     from dimos.msgs.geometry_msgs.Pose import PoseLike
 
     from .store import Session
@@ -324,26 +324,74 @@ class Stream(Generic[T]):
 class EmbeddingStream(Stream[T]):
     """Stream with a vector index. Adds search_embedding()."""
 
+    _embedding_model: EmbeddingModel | None
+
+    def __init__(
+        self,
+        backend: StreamBackend | None = None,
+        *,
+        query: StreamQuery | None = None,
+        session: Session | None = None,
+        embedding_model: EmbeddingModel | None = None,
+    ) -> None:
+        super().__init__(backend=backend, query=query, session=session)
+        self._embedding_model = embedding_model
+
+    def _require_model(self) -> EmbeddingModel:
+        if self._embedding_model is None:
+            raise TypeError(
+                "This embedding stream has no model reference. "
+                "Pass a str/image only on streams created via EmbeddingTransformer, "
+                "or search with a pre-computed Embedding / list[float]."
+            )
+        return self._embedding_model
+
+    def _clone(self, **overrides: Any) -> Stream[T]:
+        clone = super()._clone(**overrides)
+        if isinstance(clone, EmbeddingStream):
+            clone._embedding_model = self._embedding_model
+        return clone
+
     def search_embedding(
         self,
-        query: Embedding | list[float],
+        query: Embedding | list[float] | str | Any,
         *,
         k: int,
     ) -> Stream[Any]:
         """Search by vector similarity.
+
+        Accepts pre-computed embeddings, raw float lists, text strings, or
+        images/other objects.  Text and non-vector inputs are auto-embedded
+        using the model that created this stream.
 
         Auto-projects to the source stream when lineage exists, so results
         contain the source data (e.g. Images) rather than Embedding objects.
         """
         from dimos.models.embedding.base import Embedding as EmbeddingCls
 
+        if isinstance(query, str):
+            emb = self._require_model().embed_text(query)
+            if isinstance(emb, list):
+                emb = emb[0]
+            return self.search_embedding(emb, k=k)
+
         if isinstance(query, EmbeddingCls):
             vec = query.to_numpy().tolist()
-        else:
+        elif isinstance(query, list):
             vec = list(query)
+        else:
+            # Assume embeddable object (Image, etc.)
+            emb = self._require_model().embed(query)
+            if isinstance(emb, list):
+                emb = emb[0]
+            return self.search_embedding(emb, k=k)
+
         clone = self._with_filter(EmbeddingSearchFilter(vec, k))
         filtered: EmbeddingStream[T] = EmbeddingStream(
-            backend=clone._backend, query=clone._query, session=clone._session
+            backend=clone._backend,
+            query=clone._query,
+            session=clone._session,
+            embedding_model=self._embedding_model,
         )
 
         # Auto-project to source stream when lineage exists

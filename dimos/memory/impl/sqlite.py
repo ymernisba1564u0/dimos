@@ -65,6 +65,7 @@ from dimos.memory.types import (
 
 if TYPE_CHECKING:
     from dimos.memory.types import PoseProvider
+    from dimos.models.embedding.base import EmbeddingModel
 
 
 # ── Pose helpers (column-based) ──────────────────────────────────────
@@ -840,9 +841,13 @@ class SqliteSession(Session):
         vec_dimensions: int | None = None,
         pose_provider: PoseProvider | None = None,
         parent_table: str | None = None,
+        embedding_model: EmbeddingModel | None = None,
     ) -> EmbeddingStream[Any]:
         if name in self._streams:
-            return self._streams[name]  # type: ignore[return-value]
+            existing = self._streams[name]
+            if embedding_model is not None and isinstance(existing, EmbeddingStream):
+                existing._embedding_model = embedding_model
+            return existing  # type: ignore[return-value]
 
         if payload_type is None:
             payload_type = self._resolve_payload_type(name)
@@ -862,7 +867,9 @@ class SqliteSession(Session):
         if vec_dimensions is not None:
             backend._ensure_vec_table()
 
-        es: EmbeddingStream[Any] = EmbeddingStream(backend=backend, session=self)
+        es: EmbeddingStream[Any] = EmbeddingStream(
+            backend=backend, session=self, embedding_model=embedding_model
+        )
         self._streams[name] = es
         return es
 
@@ -893,6 +900,7 @@ class SqliteSession(Session):
         target: Stream[Any]
         if isinstance(transformer, EmbeddingTransformer):
             target = self.embedding_stream(name, payload_type, parent_table=source_table)
+            target._embedding_model = transformer.model
         elif isinstance(transformer, CaptionTransformer):
             target = self.text_stream(name, payload_type)
         else:

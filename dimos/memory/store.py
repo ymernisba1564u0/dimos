@@ -18,6 +18,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from dimos.models.embedding.base import EmbeddingModel
+
     from .stream import EmbeddingStream, Stream, TextStream
     from .transformer import Transformer
     from .types import PoseProvider, StreamInfo
@@ -56,6 +58,7 @@ class Session(ABC):
         vec_dimensions: int | None = None,
         pose_provider: PoseProvider | None = None,
         parent_table: str | None = None,
+        embedding_model: EmbeddingModel | None = None,
     ) -> EmbeddingStream[Any]:
         """Get or create an embedding stream with vec0 index."""
 

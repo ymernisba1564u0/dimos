@@ -74,7 +74,7 @@ else:
     clip = CLIPModel()
     clip.start()
     sharp = session.stream("sharp_frames")
-    embeddings = session.embedding_stream("clip_embeddings")
+    embeddings = session.embedding_stream("clip_embeddings", embedding_model=clip)
     print(f"  {sharp.count()} sharp frames, {embeddings.count()} embeddings")
 
 # 4. Search and export
@@ -95,10 +95,9 @@ caption_xf = CaptionTransformer(captioner)
 
 for query_text in queries:
     print(f"\nQuery: '{query_text}'")
-    query_emb = clip.embed_text(query_text)
 
-    # Fork-and-zip: one DB query, two uses via ObservationSet
-    results = embeddings.search_embedding(query_emb, k=5).fetch()
+    # search_embedding auto-embeds text; ObservationSet enables fork-and-zip
+    results = embeddings.search_embedding(query_text, k=5).fetch()
     captions = results.transform(caption_xf).fetch()
 
     slug = query_text.replace(" ", "_")[:30]

@@ -628,6 +628,69 @@ class TestProjectTo:
         for obs in results:
             assert _img_close(obs.data, images[1]) or _img_close(obs.data, images[2])
 
+    def test_search_by_text(self, session: SqliteSession, images: list[Image]) -> None:
+        """search_embedding accepts a string and auto-embeds via model."""
+
+        class FakeEmbedder(EmbeddingModel):
+            device = "cpu"
+
+            def embed(self, *imgs: Image) -> Embedding | list[Embedding]:  # type: ignore[override]
+                results = []
+                for img in imgs:
+                    val = float(img.data.mean()) / 255.0
+                    results.append(Embedding(np.array([val, 1.0 - val, 0.0], dtype=np.float32)))
+                return results if len(results) > 1 else results[0]
+
+            def embed_text(self, *texts: str) -> Embedding | list[Embedding]:
+                results = []
+                for _text in texts:
+                    results.append(Embedding(np.array([0.5, 0.5, 0.0], dtype=np.float32)))
+                return results if len(results) > 1 else results[0]
+
+        imgs = session.stream("pttxt_images", Image)
+        imgs.append(images[0], ts=1.0)
+        imgs.append(images[1], ts=2.0)
+
+        embs = imgs.transform(EmbeddingTransformer(FakeEmbedder())).store("pttxt_embs")
+
+        # Search with text string — auto-embeds via embed_text()
+        results = embs.search_embedding("a hallway", k=2).fetch()
+        assert len(results) == 2
+
+    def test_search_by_image(self, session: SqliteSession, images: list[Image]) -> None:
+        """search_embedding accepts an image and auto-embeds via model."""
+
+        class FakeEmbedder(EmbeddingModel):
+            device = "cpu"
+
+            def embed(self, *imgs: Image) -> Embedding | list[Embedding]:  # type: ignore[override]
+                results = []
+                for img in imgs:
+                    val = float(img.data.mean()) / 255.0
+                    results.append(Embedding(np.array([val, 1.0 - val, 0.0], dtype=np.float32)))
+                return results if len(results) > 1 else results[0]
+
+            def embed_text(self, *texts: str) -> Embedding | list[Embedding]:
+                raise NotImplementedError
+
+        imgs = session.stream("ptimg_images", Image)
+        imgs.append(images[0], ts=1.0)
+        imgs.append(images[1], ts=2.0)
+
+        embs = imgs.transform(EmbeddingTransformer(FakeEmbedder())).store("ptimg_embs")
+
+        # Search with image — auto-embeds via embed()
+        results = embs.search_embedding(images[0], k=1).fetch()
+        assert len(results) == 1
+
+    def test_search_no_model_raises(self, session: SqliteSession) -> None:
+        """search_embedding with str raises when no model is available."""
+        es = session.embedding_stream("pt_nomodel", vec_dimensions=3)
+        es.append(Embedding(np.array([1.0, 0.0, 0.0], dtype=np.float32)), ts=1.0)
+
+        with pytest.raises(TypeError, match="no model reference"):
+            es.search_embedding("hello", k=1)
+
     def test_no_lineage_fallback(self, session: SqliteSession) -> None:
         """search_embedding without lineage returns EmbeddingStream (no projection)."""
         es = session.embedding_stream("pt_standalone", vec_dimensions=3)
