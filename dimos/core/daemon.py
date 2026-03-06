@@ -93,11 +93,11 @@ def daemonize(log_dir: Path) -> None:
     """Double-fork daemonize the current process.
 
     After this call the *caller* is the daemon grandchild.
-    stdout / stderr are redirected to files inside *log_dir*.
+    stdin/stdout/stderr are redirected to ``/dev/null`` — all real
+    logging goes through structlog's FileHandler to ``main.jsonl``.
     The two intermediate parents call ``os._exit(0)``.
     """
     log_dir.mkdir(parents=True, exist_ok=True)
-    stderr_path = log_dir / "daemon.log"
 
     # First fork — detach from terminal
     pid = os.fork()
@@ -111,20 +111,15 @@ def daemonize(log_dir: Path) -> None:
     if pid > 0:
         os._exit(0)
 
-    # Redirect file descriptors
+    # Redirect all stdio to /dev/null — structlog FileHandler is the log path
     sys.stdout.flush()
     sys.stderr.flush()
 
     devnull = open(os.devnull)
-    stderr_file = open(stderr_path, "a")
-
     os.dup2(devnull.fileno(), sys.stdin.fileno())
-    os.dup2(stderr_file.fileno(), sys.stdout.fileno())
-    os.dup2(stderr_file.fileno(), sys.stderr.fileno())
-
-    # Close original FDs — dup2'd copies keep the underlying files open
+    os.dup2(devnull.fileno(), sys.stdout.fileno())
+    os.dup2(devnull.fileno(), sys.stderr.fileno())
     devnull.close()
-    stderr_file.close()
 
 
 # ---------------------------------------------------------------------------
