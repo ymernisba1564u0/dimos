@@ -84,8 +84,12 @@ class Go2FleetConnection(GO2Connection):
 
     @rpc
     def stop(self) -> None:
+        # one robot's error should not prevent others from stopping
         for conn in self._extra_connections:
-            conn.stop()
+            try:
+                conn.stop()
+            except Exception as e:
+                logger.error(f"Error stopping fleet Go2: {e}")
         self._extra_connections.clear()
         super().stop()
 
