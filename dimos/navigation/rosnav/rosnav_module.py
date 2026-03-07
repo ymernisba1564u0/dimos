@@ -108,6 +108,7 @@ class ROSNavConfig(DockerModuleConfig):
     )
 
     # --- Docker settings ---
+    docker_restart_policy: str = "no"  # Don't auto-restart; host process manages lifecycle
     docker_startup_timeout = 180
     docker_image: str = "dimos_rosnav:humble"
     docker_shm_size: str = "8g"
@@ -278,7 +279,7 @@ class ROSNavConfig(DockerModuleConfig):
             self.docker_env["XAUTHORITY"] = "/tmp/.Xauthority"
 
 
-class ROSNav(Module, NavigationInterface, spec.Nav, spec.LocalPlanner):
+class ROSNav(Module):
     config: ROSNavConfig
     default_config = ROSNavConfig
 

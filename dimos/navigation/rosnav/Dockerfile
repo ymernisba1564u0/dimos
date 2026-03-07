@@ -140,12 +140,9 @@ RUN if [ "${TARGETARCH}" = "arm64" ]; then \
 # Create workspace
 RUN mkdir -p ${WORKSPACE}/src
 
-# Clone autonomy stack source via SSH (requires --ssh default at build time)
-RUN --mount=type=ssh \
-    mkdir -p ~/.ssh && \
-    ssh-keyscan github.com >> ~/.ssh/known_hosts && \
-    git clone -b ${NAV_STACK_REF} --depth 1 \
-        git@github.com:dimensionalOS/ros-navigation-autonomy-stack.git \
+# Clone autonomy stack source
+RUN git clone -b ${NAV_STACK_REF} --depth 1 \
+        https://github.com/jeff-hykin/ros-navigation-autonomy-stack.git \
         ${WORKSPACE}/src/ros-navigation-autonomy-stack
 
 # On arm64, replace pre-built x86_64 or-tools with arm64 built version
