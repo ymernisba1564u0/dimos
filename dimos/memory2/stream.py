@@ -213,23 +213,21 @@ class Stream(Generic[T]):
     def live(self, buffer: BackpressureBuffer[Observation[Any]] | None = None) -> Stream[T]:
         """Return a stream that yields backfill then live data (infinite iterator).
 
-        Default buffer: KeepLast(). Subscribes to the root backend BEFORE
-        backfill starts and deduplicates by observation id.
-        """
-        buf = buffer if buffer is not None else KeepLast()
-        backend = self._find_backend()
-        sub = backend.subscribe(buf)
-        return Stream(self._source, query=self._query, _live_buf=buf, _live_sub=sub)
+        Only valid on backend-backed streams. Transforms downstream of a live
+        stream just see an infinite iterator — they don't need to know about
+        liveness. Call .live() before .transform(), not after.
 
-    def _find_backend(self) -> Backend[Any]:
-        """Walk up the source chain to find the root Backend."""
-        source = self._source
-        while isinstance(source, tuple):
-            upstream_stream, _ = source
-            source = upstream_stream._source
-        if not isinstance(source, Backend):
-            raise TypeError("Cannot find a backend in this stream chain")
-        return source
+        Default buffer: KeepLast(). Subscribes to the backend BEFORE backfill
+        starts and deduplicates by observation id.
+        """
+        if isinstance(self._source, tuple):
+            raise TypeError(
+                "Cannot call .live() on a transform stream. "
+                "Call .live() on the source stream, then .transform()."
+            )
+        buf = buffer if buffer is not None else KeepLast()
+        sub = self._source.subscribe(buf)
+        return Stream(self._source, query=self._query, _live_buf=buf, _live_sub=sub)
 
     # ── Terminals ───────────────────────────────────────────────────
 
