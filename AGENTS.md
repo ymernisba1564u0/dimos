@@ -126,20 +126,22 @@ Key fields: `robot_ip`, `simulation`, `replay`, `viewer` (`rerun`|`rerun-web`|`f
 ## Testing
 
 ```bash
-# Fast tests (default — pytest.ini excludes slow, tool, mujoco)
-pytest
+# Fast tests (default — pyproject.toml addopts excludes slow, tool, mujoco)
+uv run pytest
 
 # Include slow tests (what CI runs)
 ./bin/pytest-slow
 
 # Single file
-pytest dimos/core/test_blueprints.py -v
+uv run pytest dimos/core/test_blueprints.py -v
 
 # Mypy
-python -m mypy dimos/
+uv run mypy dimos/
 ```
 
-**`pytest` alone runs fast tests only** — `addopts` in `pyproject.toml` includes `-m 'not (tool or slow or mujoco)'`.
+Use `uv run` to ensure the venv and deps are correct.
+
+**`uv run pytest` runs fast tests only** — `addopts` in `pyproject.toml` includes `-m 'not (tool or slow or mujoco)'`.
 
 **CI runs `./bin/pytest-slow`** which uses `-m 'not (tool or mujoco)'` — includes slow tests but excludes tool and mujoco.
 
