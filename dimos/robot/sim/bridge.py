@@ -188,7 +188,7 @@ class DimSimBridge(NativeModule, spec.Camera, spec.Pointcloud):
                 f" → {registry_ver or 'latest'}",
             )
             subprocess.run(
-                [deno, "install", "-gAf", "--unstable-net", _DIMSIM_JSR],
+                [deno, "install", "-gAf", "--reload", "--unstable-net", _DIMSIM_JSR],
                 check=True,
             )
             dimsim = shutil.which("dimsim")
