@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 from reactivex.disposable import Disposable
@@ -33,7 +34,24 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 
-class G1Connection(Module):
+class G1ConnectionBase(Module, ABC):
+    """Abstract base for G1 connections (real hardware and simulation).
+
+    Modules that depend on G1 connection RPC methods should reference this
+    base class so the blueprint wiring works regardless of which concrete
+    connection is deployed.
+    """
+
+    @rpc
+    @abstractmethod
+    def move(self, twist: Twist, duration: float = 0.0) -> None: ...
+
+    @rpc
+    @abstractmethod
+    def publish_request(self, topic: str, data: dict[str, Any]) -> dict[Any, Any]: ...
+
+
+class G1Connection(G1ConnectionBase):
     cmd_vel: In[Twist]
     ip: str | None
     connection_type: str | None = None
