@@ -30,7 +30,7 @@ Supporting Systems:
 | `stream.py`    | Stream node — filters, transforms, terminals                      |
 | `backend.py`   | Backend protocol, LiveChannel / VectorStore / BlobStore ABCs     |
 | `filter.py`    | StreamQuery dataclass, filter types, Python query execution       |
-| `transform.py` | Transformer protocol, FnTransformer, QualityWindow                |
+| `transform.py` | Transformer ABC, FnTransformer, FnIterTransformer, QualityWindow  |
 | `buffer.py`    | Backpressure buffers for live mode (KeepLast, Bounded, Unbounded) |
 | `store.py`     | Store / Session (Configurable), StoreConfig / SessionConfig      |
 | `type.py`      | Observation, EmbeddedObservation dataclasses                      |
@@ -88,8 +88,15 @@ with store.session() as session:
     nearest = images.near(pose, radius=2.0).fetch()
     latest = images.last()
 
-    # Transform
+    # Transform (class or bare generator function)
     edges = images.transform(Canny()).save(session.stream("edges"))
+
+    def running_avg(upstream):
+        total, n = 0.0, 0
+        for obs in upstream:
+            total += obs.data; n += 1
+            yield obs.derive(data=total / n)
+    avgs = stream.transform(running_avg).fetch()
 
     # Live
     for obs in images.live().transform(process):

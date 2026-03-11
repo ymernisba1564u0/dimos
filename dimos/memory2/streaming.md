@@ -13,7 +13,7 @@ These return generators — each observation flows through one at a time. Safe w
 |---------------------------------------------------------------------------|-------------------------------------------------|
 | `.after()` `.before()` `.time_range()` `.at()` `.near()` `.filter_tags()` | Filter predicates — skip non-matching obs       |
 | `.filter(pred)`                                                           | Same, user-defined predicate                    |
-| `.transform(xf)` / `.map(fn)`                                             | Generator — yields transformed obs one by one   |
+| `.transform(xf_or_fn)` / `.map(fn)`                                       | Generator — yields transformed obs one by one   |
 | `.search_text(text)`                                                      | Generator — substring match filter              |
 | `.limit(k)`                                                               | `islice` — stops after k                        |
 | `.offset(n)`                                                              | `islice` — skips first n                        |

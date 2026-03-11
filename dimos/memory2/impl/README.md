@@ -1,6 +1,6 @@
 # impl — Backend implementations
 
-Storage backends for memory2. Each backend implements the `Backend` protocol (and optionally `LiveBackend`) to provide observation storage with query support.
+Storage backends for memory2. Each backend implements the `Backend` protocol to provide observation storage with query support. All backends support live mode via a pluggable `LiveChannel`.
 
 ## Existing backends
 
@@ -14,20 +14,34 @@ Storage backends for memory2. Each backend implements the `Backend` protocol (an
 ### 1. Implement the Backend protocol
 
 ```python
-from dimos.memory2.backend import Backend
+from dimos.memory2.backend import Backend, BackendConfig, LiveChannel
 from dimos.memory2.filter import StreamQuery
+from dimos.memory2.livechannel.subject import SubjectChannel
 from dimos.memory2.type import Observation
+from dimos.protocol.service.spec import Configurable
 
-class MyBackend(Generic[T]):
+class MyBackend(Configurable[BackendConfig], Generic[T]):
+    default_config: type[BackendConfig] = BackendConfig
+
+    def __init__(self, name: str, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._name = name
+        self._channel: LiveChannel[T] = self.config.live_channel or SubjectChannel()
+
     @property
     def name(self) -> str:
         return self._name
+
+    @property
+    def live_channel(self) -> LiveChannel[T]:
+        return self._channel
 
     def append(self, obs: Observation[T]) -> Observation[T]:
         """Assign an id and store. Return the stored observation."""
         obs.id = self._next_id
         self._next_id += 1
         # ... persist obs ...
+        self._channel.notify(obs)
         return obs
 
     def iterate(self, query: StreamQuery) -> Iterator[Observation[T]]:
@@ -41,7 +55,7 @@ class MyBackend(Generic[T]):
         #   query.search_vec    — Embedding for vector search
         #   query.search_k      — top-k for vector search
         #   query.search_text   — substring text search
-        #   query.live_buffer   — if set, switch to live mode (see LiveBackend)
+        #   query.live_buffer   — if set, switch to live mode
         ...
 
     def count(self, query: StreamQuery) -> int:
@@ -51,24 +65,13 @@ class MyBackend(Generic[T]):
 
 `Backend` is a `@runtime_checkable` Protocol — no base class needed, just implement the methods.
 
-### 2. Add LiveBackend support (optional)
+### 2. Live mode via LiveChannel
 
-If your backend supports live subscriptions (push notifications on new observations):
-
-```python
-from dimos.memory2.backend import LiveBackend
-
-class MyBackend(Generic[T]):
-    # ... Backend methods ...
-
-    def subscribe(self, buf: BackpressureBuffer[Observation[T]]) -> DisposableBase:
-        """Register a buffer for push notifications. Return a disposable to unsubscribe."""
-        ...
-```
+Every backend exposes a `live_channel` property. The default `SubjectChannel` handles same-process fan-out. Inject a custom `LiveChannel` (Redis pub/sub, Postgres LISTEN/NOTIFY, etc.) via `BackendConfig.live_channel` for cross-process use.
 
 The `iterate()` method should check `query.live_buffer`:
 - If `None`: return a snapshot iterator
-- If set: subscribe before backfill, then yield a live tail that deduplicates by `obs.id`
+- If set: subscribe via `self._channel.subscribe(buf)` before backfill, then yield a live tail that deduplicates by `obs.id`
 
 See `ListBackend._iterate_live()` for the reference implementation.
 
@@ -78,12 +81,14 @@ See `ListBackend._iterate_live()` for the reference implementation.
 from dimos.memory2.store import Session, Store
 
 class MySession(Session):
-    def _create_backend(self, name: str, payload_type: type | None = None) -> Backend:
-        return MyBackend(self._conn, name)
+    def _create_backend(
+        self, name: str, payload_type: type | None = None, **config: Any
+    ) -> Backend:
+        return MyBackend(name, **config)
 
 class MyStore(Store):
-    def session(self) -> MySession:
-        return MySession(...)
+    def session(self, **kwargs: Any) -> MySession:
+        return MySession(**kwargs)
 ```
 
 ### 4. Add to the grid test
