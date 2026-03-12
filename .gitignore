@@ -69,6 +69,8 @@ yolo11n.pt
 
 CLAUDE.MD
 /assets/teleop_certs/
+/assets/temporal_memory/
+/assets/surveillance/
 
 /.mcp.json
 *.speedscope.json
