@@ -14,6 +14,7 @@
 
 import asyncio
 import os
+import re
 import threading
 
 from dotenv import load_dotenv
@@ -158,6 +159,16 @@ def monitor_threads(request):
             t
             for t in new_threads
             if not any(t.name.startswith(prefix) for prefix in expected_persistent_thread_prefixes)
+        ]
+
+        # Filter out third-party daemon threads with generic names (e.g. "Thread-109").
+        # On Python 3.12+ our own threads include the target function name in parens
+        # (e.g. "Thread-166 (run_forever)"), so this only matches unnamed threads
+        # from libraries like torch/HuggingFace that have no cleanup API.
+        new_threads = [
+            t
+            for t in new_threads
+            if not (t.daemon and re.fullmatch(r"Thread-\d+", t.name))
         ]
 
         # Filter out threads we've already seen (from previous tests)
