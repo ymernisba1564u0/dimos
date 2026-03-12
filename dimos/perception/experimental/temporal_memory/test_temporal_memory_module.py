@@ -21,7 +21,7 @@ import os
 import threading
 import time
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 from dotenv import load_dotenv
 import numpy as np
@@ -33,6 +33,7 @@ from dimos.core.module import Module
 from dimos.core.module_coordinator import ModuleCoordinator
 from dimos.core.stream import Out
 from dimos.core.transport import LCMTransport
+from dimos.models.vl.base import VlModel
 from dimos.msgs.sensor_msgs import Image
 from dimos.perception.experimental.temporal_memory import (
     Frame,
@@ -337,7 +338,7 @@ class TestPersistence:
             return_value=None,
         ):
             tm = TemporalMemory(
-                vlm=MagicMock(),
+                vlm=create_autospec(VlModel, spec_set=True, instance=True),
                 config=TemporalMemoryConfig(db_dir=str(db_dir), new_memory=True),
             )
             # DB should be empty since we cleared it
@@ -361,7 +362,7 @@ class TestPersistence:
             return_value=None,
         ):
             tm = TemporalMemory(
-                vlm=MagicMock(),
+                vlm=create_autospec(VlModel, spec_set=True, instance=True),
                 config=TemporalMemoryConfig(db_dir=str(db_dir), new_memory=False),
             )
             stats = tm._graph_db.get_stats()
@@ -386,7 +387,7 @@ class TestJSONLLogging:
             return_value=log_dir,
         ):
             tm = TemporalMemory(
-                vlm=MagicMock(),
+                vlm=create_autospec(VlModel, spec_set=True, instance=True),
                 config=TemporalMemoryConfig(db_dir=str(db_dir)),
             )
 
@@ -427,7 +428,7 @@ class TestEntityMarkers:
             return_value=None,
         ):
             tm = TemporalMemory(
-                vlm=MagicMock(),
+                vlm=create_autospec(VlModel, spec_set=True, instance=True),
                 config=TemporalMemoryConfig(db_dir=str(db_dir), visualize=True),
             )
 
@@ -487,7 +488,7 @@ class TestWindowAnalyzer:
     def test_analyze_window_calls_vlm(self) -> None:
         from dimos.perception.experimental.temporal_memory.window_analyzer import WindowAnalyzer
 
-        mock_vlm = MagicMock()
+        mock_vlm = create_autospec(VlModel, spec_set=True, instance=True)
         mock_vlm.query.return_value = json.dumps(
             {
                 "window": {"start_s": 0.0, "end_s": 2.0},
@@ -513,7 +514,7 @@ class TestWindowAnalyzer:
     def test_analyze_window_vlm_error(self) -> None:
         from dimos.perception.experimental.temporal_memory.window_analyzer import WindowAnalyzer
 
-        mock_vlm = MagicMock()
+        mock_vlm = create_autospec(VlModel, spec_set=True, instance=True)
         mock_vlm.query.side_effect = RuntimeError("VLM error")
 
         analyzer = WindowAnalyzer(mock_vlm)
@@ -527,7 +528,7 @@ class TestWindowAnalyzer:
     def test_update_summary(self) -> None:
         from dimos.perception.experimental.temporal_memory.window_analyzer import WindowAnalyzer
 
-        mock_vlm = MagicMock()
+        mock_vlm = create_autospec(VlModel, spec_set=True, instance=True)
         mock_vlm.query.return_value = "Updated summary text"
 
         analyzer = WindowAnalyzer(mock_vlm)
@@ -540,7 +541,7 @@ class TestWindowAnalyzer:
     def test_answer_query(self) -> None:
         from dimos.perception.experimental.temporal_memory.window_analyzer import WindowAnalyzer
 
-        mock_vlm = MagicMock()
+        mock_vlm = create_autospec(VlModel, spec_set=True, instance=True)
         mock_vlm.query.return_value = "The answer is 42"
 
         analyzer = WindowAnalyzer(mock_vlm)
