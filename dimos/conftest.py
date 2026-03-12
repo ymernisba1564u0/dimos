@@ -160,7 +160,6 @@ def monitor_threads(request):
             if not any(t.name.startswith(prefix) for prefix in expected_persistent_thread_prefixes)
         ]
 
-
         # Filter out threads we've already seen (from previous tests)
         truly_new = [t for t in new_threads if t.ident not in _seen_threads]
 
