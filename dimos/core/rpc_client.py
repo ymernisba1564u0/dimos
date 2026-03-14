@@ -78,10 +78,15 @@ class RpcCall:
         return result
 
     def __getstate__(self):  # type: ignore[no-untyped-def]
-        return (self._name, self._remote_name)
+        return (self._name, self._remote_name, self._timeout)
 
     def __setstate__(self, state) -> None:  # type: ignore[no-untyped-def]
-        self._name, self._remote_name = state
+        # Support both old 2-tuple and new 3-tuple state for pickle compat.
+        if len(state) == 2:
+            self._name, self._remote_name = state
+            self._timeout = 0
+        else:
+            self._name, self._remote_name, self._timeout = state
         self._unsub_fns = []
         self._rpc = None
         self._stop_rpc_client = None

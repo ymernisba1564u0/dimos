@@ -83,7 +83,7 @@ from dimos.msgs.nav_msgs.Path import Path as NavPath
 from dimos.msgs.sensor_msgs.Image import Image, ImageFormat
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.msgs.tf2_msgs.TFMessage import TFMessage
-from dimos.navigation.base import NavigationState
+from dimos.navigation.base import NavigationInterface, NavigationState
 from dimos.utils.data import get_data
 from dimos.utils.generic import is_jetson
 from dimos.utils.logging_config import setup_logger
@@ -295,7 +295,7 @@ class ROSNavConfig(DockerModuleConfig):
             self.docker_env["XAUTHORITY"] = "/tmp/.Xauthority"
 
 
-class ROSNav(Module):
+class ROSNav(Module, NavigationInterface):
     config: ROSNavConfig
     default_config = ROSNavConfig
 
