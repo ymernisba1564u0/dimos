@@ -92,31 +92,6 @@ class TestRegistryStore:
         assert reg.get("x") == {"v": 2}
         conn.close()
 
-    def test_migrate_legacy_schema(self, tmp_path) -> None:
-        """RegistryStore migrates old (name, payload_module, codec_id) tables."""
-        from dimos.memory2.utils.sqlite import open_sqlite_connection
-
-        conn = open_sqlite_connection(str(tmp_path / "legacy.db"))
-        conn.execute(
-            "CREATE TABLE _streams ("
-            "    name TEXT PRIMARY KEY,"
-            "    payload_module TEXT NOT NULL,"
-            "    codec_id TEXT NOT NULL"
-            ")"
-        )
-        conn.execute(
-            "INSERT INTO _streams VALUES (?, ?, ?)",
-            ("cam", "dimos.msgs.sensor_msgs.Image.Image", "jpeg"),
-        )
-        conn.commit()
-
-        reg = RegistryStore(conn)
-        stored = reg.get("cam")
-        assert stored is not None
-        assert stored["payload_module"] == "dimos.msgs.sensor_msgs.Image.Image"
-        assert stored["codec_id"] == "jpeg"
-        conn.close()
-
 
 class TestComponentSerialization:
     def test_sqlite_observation_store_config(self) -> None:

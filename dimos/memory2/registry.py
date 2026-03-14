@@ -40,40 +40,13 @@ class RegistryStore:
 
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
-        self._migrate_or_create()
-
-    def _migrate_or_create(self) -> None:
-        """Create the registry table, migrating from the legacy schema if needed."""
-        # Check if _streams exists and what columns it has
-        cols = {row[1] for row in self._conn.execute("PRAGMA table_info(_streams)").fetchall()}
-        if not cols:
-            # Table doesn't exist — create fresh
-            self._conn.execute(
-                "CREATE TABLE _streams (    name   TEXT PRIMARY KEY,    config TEXT NOT NULL)"
-            )
-            self._conn.commit()
-        elif "config" not in cols:
-            # Legacy schema: (name, payload_module, codec_id) → migrate
-            rows = self._conn.execute(
-                "SELECT name, payload_module, codec_id FROM _streams"
-            ).fetchall()
-            self._conn.execute("DROP TABLE _streams")
-            self._conn.execute(
-                "CREATE TABLE _streams (    name   TEXT PRIMARY KEY,    config TEXT NOT NULL)"
-            )
-            for name, payload_module, cid in rows:
-                config = json.dumps(
-                    {
-                        "payload_module": payload_module,
-                        "codec_id": cid,
-                    }
-                )
-                self._conn.execute(
-                    "INSERT INTO _streams (name, config) VALUES (?, ?)",
-                    (name, config),
-                )
-            self._conn.commit()
-        # else: already has the right schema
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS _streams ("
+            "    name   TEXT PRIMARY KEY,"
+            "    config TEXT NOT NULL"
+            ")"
+        )
+        self._conn.commit()
 
     def get(self, name: str) -> dict[str, Any] | None:
         row = self._conn.execute("SELECT config FROM _streams WHERE name = ?", (name,)).fetchone()
