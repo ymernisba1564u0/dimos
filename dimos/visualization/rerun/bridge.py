@@ -36,9 +36,17 @@ import typer
 
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
+from dimos.msgs.sensor_msgs import Image, PointCloud2
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM
 from dimos.protocol.pubsub.patterns import Glob, pattern_matches
 from dimos.utils.logging_config import setup_logger
+
+# Message types with large payloads that need rate-limiting.
+# Image (~1 MB/frame at 30 fps) and PointCloud2 (~600-800 KB/frame)
+# cause viewer OOM if logged at full rate.  Light messages
+# (Path, PointStamped, Twist, TF, EntityMarkers …) pass through
+# unthrottled so navigation overlays and user input are never dropped.
+_HEAVY_MSG_TYPES: tuple[type, ...] = (Image, PointCloud2)
 
 RERUN_GRPC_PORT = 9876
 RERUN_WEB_PORT = 9090
@@ -163,9 +171,7 @@ def _resolve_viewer_mode() -> ViewerMode:
 class Config(ModuleConfig):
     """Configuration for RerunBridgeModule."""
 
-    pubsubs: list[SubscribeAllCapable[Any, Any]] = field(
-        default_factory=lambda: [LCM(autoconf=True)]
-    )
+    pubsubs: list[SubscribeAllCapable[Any, Any]] = field(default_factory=lambda: [LCM()])
 
     visual_override: dict[Glob | str, Callable[[Any], Archetype]] = field(default_factory=dict)
 
@@ -193,7 +199,7 @@ class RerunBridgeModule(Module):
     Example:
         from dimos.protocol.pubsub.impl.lcmpubsub import LCM
 
-        lcm = LCM(autoconf=True)
+        lcm = LCM()
         bridge = RerunBridgeModule(pubsubs=[lcm])
         bridge.start()
         # All messages with to_rerun() are now logged to Rerun
@@ -256,10 +262,11 @@ class RerunBridgeModule(Module):
         # convert a potentially complex topic object into an str rerun entity path
         entity_path: str = self._get_entity_path(topic)
 
-        # Rate-limit per entity path to prevent viewer memory exhaustion.
-        # High-bandwidth streams (e.g. 30fps camera) would otherwise flood
-        # the viewer with data faster than it can evict, causing OOM.
-        if self.config.min_interval_sec > 0:
+        # Rate-limit heavy data types to prevent viewer memory exhaustion.
+        # High-bandwidth streams (e.g. 30fps camera, lidar) would otherwise
+        # flood the viewer faster than it can evict, causing OOM.  Light
+        # messages (Path, PointStamped, TF, etc.) pass through unthrottled.
+        if self.config.min_interval_sec > 0 and isinstance(msg, _HEAVY_MSG_TYPES):
             now = time.monotonic()
             last = self._last_log.get(entity_path, 0.0)
             if now - last < self.config.min_interval_sec:
@@ -357,12 +364,16 @@ def run_bridge(
     """Start a RerunBridgeModule with default LCM config and block until interrupted."""
     import signal
 
+    from dimos.protocol.service.lcmservice import autoconf
+
+    autoconf(check_only=True)
+
     bridge = RerunBridgeModule(
         viewer_mode=viewer_mode,
         memory_limit=memory_limit,
         # any pubsub that supports subscribe_all and topic that supports str(topic)
         # is acceptable here
-        pubsubs=[LCM(autoconf=True)],
+        pubsubs=[LCM()],
     )
 
     bridge.start()

@@ -13,15 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Agentic G1 sim stack."""
+"""Legacy agentic G1 sim stack (superseded by blueprints.agentic.unitree_g1_agentic_sim)."""
 
 from dimos.core.blueprints import autoconnect
 from dimos.robot.unitree.g1.legacy.blueprints.agentic._agentic_skills import _agentic_skills
 from dimos.robot.unitree.g1.legacy.blueprints.perceptive.unitree_g1_sim import unitree_g1_sim
 
-unitree_g1_agentic_sim = autoconnect(
+legacy_unitree_g1_agentic_sim = autoconnect(
     unitree_g1_sim,
     _agentic_skills,
 )
 
-__all__ = ["unitree_g1_agentic_sim"]
+__all__ = ["legacy_unitree_g1_agentic_sim"]
