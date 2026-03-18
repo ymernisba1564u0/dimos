@@ -48,7 +48,9 @@ class OrbSlam3Config(NativeModuleConfig):
 
     cwd: str | None = None
     executable: str = "result/bin/orbslam3_native"
-    build_command: str | None = "nix build github:dimensionalOS/dimos-orb-slam3"
+    build_command: str | None = (
+        "nix build github:dimensionalOS/dimos-orb-slam3 --no-write-lock-file"
+    )
 
     # ORB-SLAM3 sensor mode
     sensor_mode: str = "MONOCULAR"  # MONOCULAR, STEREO, RGBD, IMU_MONOCULAR, IMU_STEREO, IMU_RGBD

@@ -15,10 +15,12 @@
 from dimos.core.blueprints import autoconnect
 from dimos.hardware.sensors.camera.module import CameraModule
 from dimos.perception.slam.orbslam3.module import OrbSlam3
+from dimos.visualization.rerun.bridge import _resolve_viewer_mode, rerun_bridge
 
 orbslam3_webcam = autoconnect(
+    rerun_bridge(viewer_mode=_resolve_viewer_mode()),
     CameraModule.blueprint(),
     OrbSlam3.blueprint(sensor_mode="MONOCULAR"),
-)
+).global_config(n_workers=3)
 
 __all__ = ["orbslam3_webcam"]
