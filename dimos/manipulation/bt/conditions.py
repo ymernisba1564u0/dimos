@@ -73,7 +73,7 @@ class GripperHasObject(ManipulationCondition):
 
     def update(self) -> Status:
         try:
-            position = self.module.get_rpc_calls("PickAndPlaceModule.get_gripper")()
+            position = self.module.get_rpc_calls("BTManipulationModule.get_gripper")()
             pos = float(position)
         except Exception as e:
             logger.error(f"[GripperHasObject] get_gripper RPC failed: {e}")
@@ -111,7 +111,7 @@ class RobotIsHealthy(ManipulationCondition):
 
     def update(self) -> Status:
         try:
-            status = self.module.get_rpc_calls("PickAndPlaceModule.get_trajectory_status")()
+            status = self.module.get_rpc_calls("BTManipulationModule.get_trajectory_status")()
         except Exception as e:
             logger.error(f"[RobotIsHealthy] get_trajectory_status failed: {e}")
             return Status.FAILURE
@@ -123,7 +123,7 @@ class RobotIsHealthy(ManipulationCondition):
                 return Status.FAILURE
 
         try:
-            info = self.module.get_rpc_calls("PickAndPlaceModule.get_robot_info")()
+            info = self.module.get_rpc_calls("BTManipulationModule.get_robot_info")()
         except Exception as e:
             logger.error(f"[RobotIsHealthy] get_robot_info failed: {e}")
             return Status.FAILURE
@@ -178,7 +178,7 @@ class VerifyReachedPose(ManipulationCondition):
             return Status.FAILURE
 
         try:
-            actual: Pose | None = self.module.get_rpc_calls("PickAndPlaceModule.get_ee_pose")()
+            actual: Pose | None = self.module.get_rpc_calls("BTManipulationModule.get_ee_pose")()
         except Exception as e:
             self.bb.error_message = f"Error: get_ee_pose failed — {e}"
             return Status.FAILURE
@@ -219,7 +219,7 @@ class VerifyHoldAfterLift(ManipulationCondition):
 
     def update(self) -> Status:
         try:
-            position = self.module.get_rpc_calls("PickAndPlaceModule.get_gripper")()
+            position = self.module.get_rpc_calls("BTManipulationModule.get_gripper")()
             pos = float(position)
         except Exception as e:
             logger.error(f"[VerifyHoldAfterLift] get_gripper failed: {e}")

@@ -14,7 +14,7 @@
 
 """BT action leaf nodes for pick-and-place orchestration.
 
-Each action wraps one or more PickAndPlaceModule / OSR / GraspGen RPC calls,
+Each action wraps one or more BTManipulationModule / OSR / GraspGen RPC calls,
 following the py_trees lifecycle: initialise() → update() → terminate().
 
 Long-running operations (trajectory execution, gripper settle) return RUNNING
@@ -81,11 +81,11 @@ class ScanObjects(ManipulationAction):
                 time.sleep(self.module.config.prompt_settle_time)
 
             self.module.get_rpc_calls(
-                "PickAndPlaceModule.refresh_obstacles"
+                "BTManipulationModule.refresh_obstacles"
             )(self.min_duration)
 
             detections = self.module.get_rpc_calls(
-                "PickAndPlaceModule.list_cached_detections"
+                "BTManipulationModule.list_cached_detections"
             )() or []
 
             self.bb.detections = detections
@@ -214,7 +214,7 @@ class GenerateGrasps(ManipulationAction):
         def _run() -> None:
             try:
                 self._result = self.module.get_rpc_calls(
-                    "PickAndPlaceModule.generate_grasps"
+                    "BTManipulationModule.generate_grasps"
                 )(obj_pc, scene_pc, rpc_timeout=self.rpc_timeout)
             except Exception as e:
                 self._error = e
@@ -295,7 +295,7 @@ class VisualizeGrasps(ManipulationAction):
         if not candidates:
             return Status.SUCCESS
         try:
-            self.module.get_rpc_calls("PickAndPlaceModule.visualize_grasps")(candidates)
+            self.module.get_rpc_calls("BTManipulationModule.visualize_grasps")(candidates)
         except Exception as e:
             logger.warning(f"[VisualizeGrasps] Visualization failed (non-fatal): {e}")
         return Status.SUCCESS
@@ -441,8 +441,8 @@ class PlanToPose(ManipulationAction):
                 f"[PlanToPose] Planning to {self.pose_key} "
                 f"({pose.position.x:.3f}, {pose.position.y:.3f}, {pose.position.z:.3f})"
             )
-            self.module.get_rpc_calls("PickAndPlaceModule.reset")()
-            result = self.module.get_rpc_calls("PickAndPlaceModule.plan_to_pose")(pose)
+            self.module.get_rpc_calls("BTManipulationModule.reset")()
+            result = self.module.get_rpc_calls("BTManipulationModule.plan_to_pose")(pose)
             if result:
                 return Status.SUCCESS
             self.bb.error_message = f"Error: Planning to {self.pose_key} failed"
@@ -466,8 +466,8 @@ class PlanToJoints(ManipulationAction):
             if isinstance(joints, list):
                 joints = JointState(position=joints)
             logger.info(f"[PlanToJoints] Planning to {self.joints_key}")
-            self.module.get_rpc_calls("PickAndPlaceModule.reset")()
-            result = self.module.get_rpc_calls("PickAndPlaceModule.plan_to_joints")(joints)
+            self.module.get_rpc_calls("BTManipulationModule.reset")()
+            result = self.module.get_rpc_calls("BTManipulationModule.plan_to_joints")(joints)
             if result:
                 return Status.SUCCESS
             self.bb.error_message = f"Error: Joint planning to {self.joints_key} failed"
@@ -495,7 +495,7 @@ class ExecuteTrajectory(ManipulationAction):
     def initialise(self) -> None:
         self._seen_executing = False
         try:
-            result = self.module.get_rpc_calls("PickAndPlaceModule.execute")()
+            result = self.module.get_rpc_calls("BTManipulationModule.execute")()
             self._execute_ok = bool(result)
         except Exception as e:
             logger.error(f"[ExecuteTrajectory] Execute call failed: {e}")
@@ -508,7 +508,7 @@ class ExecuteTrajectory(ManipulationAction):
             return Status.FAILURE
 
         try:
-            status = self.module.get_rpc_calls("PickAndPlaceModule.get_trajectory_status")()
+            status = self.module.get_rpc_calls("BTManipulationModule.get_trajectory_status")()
         except Exception as e:
             logger.warning(f"[ExecuteTrajectory] Status poll failed: {e}")
             status = None
@@ -541,7 +541,7 @@ class ExecuteTrajectory(ManipulationAction):
     def terminate(self, new_status: Status) -> None:
         if new_status == Status.INVALID:
             try:
-                self.module.get_rpc_calls("PickAndPlaceModule.cancel")()
+                self.module.get_rpc_calls("BTManipulationModule.cancel")()
                 logger.info("[ExecuteTrajectory] Cancelled trajectory on interrupt")
             except Exception as e:
                 logger.warning(f"[ExecuteTrajectory] Cancel on interrupt failed (best-effort): {e}")
@@ -566,7 +566,7 @@ class SetGripper(ManipulationAction):
 
     def initialise(self) -> None:
         try:
-            self.module.get_rpc_calls("PickAndPlaceModule.set_gripper")(self.position)
+            self.module.get_rpc_calls("BTManipulationModule.set_gripper")(self.position)
             self._command_sent = True
         except Exception as e:
             logger.error(f"[SetGripper] Command failed: {e}")
@@ -641,11 +641,11 @@ class SetResultMessage(ManipulationAction):
 # --- Robot state actions ---
 
 class ResetRobot(ManipulationAction):
-    """Call PickAndPlaceModule.reset() to clear fault/abort state."""
+    """Call BTManipulationModule.reset() to clear fault/abort state."""
 
     def update(self) -> Status:
         try:
-            result = self.module.get_rpc_calls("PickAndPlaceModule.reset")()
+            result = self.module.get_rpc_calls("BTManipulationModule.reset")()
             if result:
                 logger.info("[ResetRobot] Reset succeeded")
                 return Status.SUCCESS
@@ -675,7 +675,7 @@ class CancelMotion(ManipulationAction):
     def update(self) -> Status:
         if not self._cancel_sent:
             try:
-                self.module.get_rpc_calls("PickAndPlaceModule.cancel")()
+                self.module.get_rpc_calls("BTManipulationModule.cancel")()
                 logger.info("[CancelMotion] Cancel sent, waiting for settle")
             except Exception as e:
                 logger.warning(f"[CancelMotion] Cancel failed (best-effort): {e}")
@@ -734,7 +734,7 @@ class ProbeGripperState(ManipulationAction):
 
     def update(self) -> Status:
         try:
-            pos = float(self.module.get_rpc_calls("PickAndPlaceModule.get_gripper")())
+            pos = float(self.module.get_rpc_calls("BTManipulationModule.get_gripper")())
             threshold = self.module.config.gripper_grasp_threshold
             open_pos = self.module.config.gripper_open_position
             # Upper bound at 90% of open prevents false positive when gripper is wide open
@@ -778,7 +778,7 @@ class ComputeLiftPose(ManipulationAction):
         lift_h = self._lift_height if self._lift_height is not None else self.module.config.lift_height
 
         try:
-            base_pose = self.module.get_rpc_calls("PickAndPlaceModule.get_ee_pose")()
+            base_pose = self.module.get_rpc_calls("BTManipulationModule.get_ee_pose")()
         except Exception as e:
             logger.warning(f"[ComputeLiftPose] get_ee_pose failed, falling back to current_grasp: {e}")
             base_pose = None
@@ -811,7 +811,7 @@ class ComputeLocalRetreatPose(ManipulationAction):
         height = self._retreat_height if self._retreat_height is not None else self.module.config.lift_height
 
         try:
-            base_pose = self.module.get_rpc_calls("PickAndPlaceModule.get_ee_pose")()
+            base_pose = self.module.get_rpc_calls("BTManipulationModule.get_ee_pose")()
         except Exception as e:
             logger.warning(f"[ComputeLocalRetreatPose] get_ee_pose failed: {e}")
             base_pose = None

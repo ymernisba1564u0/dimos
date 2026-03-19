@@ -36,6 +36,7 @@ from dimos.control.coordinator import TaskConfig, control_coordinator
 from dimos.core.blueprints import autoconnect
 from dimos.core.transport import LCMTransport
 from dimos.hardware.sensors.camera.realsense.camera import realsense_camera
+from dimos.manipulation.bt.bt_manipulation_module import bt_manipulation_module
 from dimos.manipulation.bt.pick_place_module import PickPlaceModule
 from dimos.manipulation.manipulation_module import manipulation_module
 from dimos.manipulation.pick_and_place_module import pick_and_place_module
@@ -501,9 +502,52 @@ Do NOT sequence low-level operations. Use pick/place for all manipulation.
 For robot_name parameters, always omit or pass None (single-arm setup).
 """
 
-# BT Agent mode, DL grasps via GraspGen Docker (requires GPU + Docker build)
+# BT Agent mode — uses BTManipulationModule (no skills) + BT PickPlaceModule (skills only)
+# DL grasps via GraspGen Docker (requires GPU + Docker build)
+_bt_xarm_perception = (
+    autoconnect(
+        bt_manipulation_module(
+            robots=[
+                _make_xarm7_config(
+                    "arm",
+                    pitch=math.radians(45),
+                    joint_prefix="arm_",
+                    coordinator_task="traj_arm",
+                    add_gripper=True,
+                    gripper_hardware_id="arm",
+                    tf_extra_links=["link7"],
+                ),
+            ],
+            planning_timeout=10.0,
+            enable_viz=True,
+            graspgen_topk_num_grasps=400,
+            graspgen_save_visualization_data=True,
+        ),
+        realsense_camera(
+            base_frame_id="link7",
+            base_transform=_XARM_PERCEPTION_CAMERA_TRANSFORM,
+        ),
+        object_scene_registration_module(target_frame="world", prompt_mode=YoloePromptMode.PROMPT),
+        foxglove_bridge(
+            shm_channels=[
+                "/image#sensor_msgs.Image",
+                "/overlay#foxglove_msgs.ImageAnnotations",
+                "/pointcloud#sensor_msgs.PointCloud2",
+                "/lidar#sensor_msgs.PointCloud2",
+                "/map#sensor_msgs.PointCloud2",
+            ],
+        ),
+    )
+    .transports(
+        {
+            ("joint_state", JointState): LCMTransport("/coordinator/joint_state", JointState),
+        }
+    )
+    .global_config(viewer="foxglove")
+)
+
 bt_pick_place_agent = autoconnect(
-    xarm_perception,
+    _bt_xarm_perception,
     PickPlaceModule.blueprint(),
     Agent.blueprint(system_prompt=_BT_AGENT_SYSTEM_PROMPT),
 )

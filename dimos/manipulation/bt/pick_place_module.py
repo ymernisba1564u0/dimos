@@ -98,29 +98,29 @@ class PickPlaceModule(Module):
     """BT-orchestrated pick-and-place module.
 
     Exposes @skill methods to the agent (pick, place, stop) that build and tick
-    py_trees Behavior Trees. Each BT calls PickAndPlaceModule / OSR / GraspGen
-    RPCs. This module orchestrates PickAndPlaceModule, not replaces it.
+    py_trees Behavior Trees. Each BT calls BTManipulationModule / OSR / GraspGen
+    RPCs. This module orchestrates BTManipulationModule, not replaces it.
     """
 
     default_config = PickPlaceModuleConfig
     config: PickPlaceModuleConfig
 
     rpc_calls: list[str] = [
-        "PickAndPlaceModule.plan_to_pose",
-        "PickAndPlaceModule.plan_to_joints",
-        "PickAndPlaceModule.execute",
-        "PickAndPlaceModule.get_trajectory_status",
-        "PickAndPlaceModule.cancel",
-        "PickAndPlaceModule.reset",
-        "PickAndPlaceModule.refresh_obstacles",
-        "PickAndPlaceModule.list_cached_detections",
-        "PickAndPlaceModule.get_ee_pose",
-        "PickAndPlaceModule.get_robot_info",
-        "PickAndPlaceModule.get_init_joints",
-        "PickAndPlaceModule.set_gripper",
-        "PickAndPlaceModule.get_gripper",
-        "PickAndPlaceModule.generate_grasps",
-        "PickAndPlaceModule.visualize_grasps",
+        "BTManipulationModule.plan_to_pose",
+        "BTManipulationModule.plan_to_joints",
+        "BTManipulationModule.execute",
+        "BTManipulationModule.get_trajectory_status",
+        "BTManipulationModule.cancel",
+        "BTManipulationModule.reset",
+        "BTManipulationModule.refresh_obstacles",
+        "BTManipulationModule.list_cached_detections",
+        "BTManipulationModule.get_ee_pose",
+        "BTManipulationModule.get_robot_info",
+        "BTManipulationModule.get_init_joints",
+        "BTManipulationModule.set_gripper",
+        "BTManipulationModule.get_gripper",
+        "BTManipulationModule.generate_grasps",
+        "BTManipulationModule.visualize_grasps",
         "ObjectSceneRegistrationModule.set_prompts",
         "ObjectSceneRegistrationModule.get_object_pointcloud_by_name",
         "ObjectSceneRegistrationModule.get_object_pointcloud_by_object_id",
@@ -187,7 +187,7 @@ class PickPlaceModule(Module):
             return cfg_joints
 
         try:
-            init_js = self.get_rpc_calls("PickAndPlaceModule.get_init_joints")()
+            init_js = self.get_rpc_calls("BTManipulationModule.get_init_joints")()
             if init_js is not None and init_js.position:
                 return list(init_js.position)
         except Exception as e:
@@ -204,12 +204,12 @@ class PickPlaceModule(Module):
         """Halt the BT and cancel any in-flight motion."""
         root.stop(py_trees.common.Status.INVALID)
         try:
-            self.get_rpc_calls("PickAndPlaceModule.cancel")()
+            self.get_rpc_calls("BTManipulationModule.cancel")()
         except Exception:
             pass
         if open_gripper:
             try:
-                self.get_rpc_calls("PickAndPlaceModule.set_gripper")(self.config.gripper_open_position)
+                self.get_rpc_calls("BTManipulationModule.set_gripper")(self.config.gripper_open_position)
             except Exception:
                 pass
 
@@ -353,6 +353,54 @@ class PickPlaceModule(Module):
         return self._start_async(_run)
 
     @skill
+    def detect(self, prompts: list[str]) -> str:
+        """Detect objects matching the given text prompts.
+
+        Sets detection prompts on the perception system, waits for detections,
+        and returns a list of detected objects with their 3D positions.
+
+        Args:
+            prompts: Text descriptions of objects to detect (e.g., ["cup", "bottle"]).
+        """
+        if not prompts:
+            return "No prompts provided."
+
+        try:
+            self.get_rpc_calls("ObjectSceneRegistrationModule.set_prompts")(
+                text=prompts
+            )
+        except Exception as e:
+            return f"Error setting prompts: {e}"
+
+        import time
+        time.sleep(self.config.prompt_settle_time)
+
+        try:
+            self.get_rpc_calls("BTManipulationModule.refresh_obstacles")(
+                self.config.scan_duration
+            )
+        except Exception as e:
+            return f"Error refreshing obstacles: {e}"
+
+        try:
+            detections = self.get_rpc_calls(
+                "BTManipulationModule.list_cached_detections"
+            )() or []
+        except Exception as e:
+            return f"Error listing detections: {e}"
+
+        if not detections:
+            return "No objects detected."
+
+        lines = [f"Detected {len(detections)} object(s):"]
+        for det in detections:
+            name = det.get("name", "unknown")
+            center = det.get("center", [0, 0, 0])
+            x, y, z = center[0], center[1], center[2]
+            lines.append(f"  - {name}: ({x:.3f}, {y:.3f}, {z:.3f})")
+        return "\n".join(lines)
+
+    @skill
     def stop(self) -> str:
         """Emergency stop — cancel all motion and open gripper. Safe to call at any time."""
         if self._lock.locked():
@@ -361,11 +409,11 @@ class PickPlaceModule(Module):
             return "Stop signal sent — operation will halt on next tick"
 
         try:
-            self.get_rpc_calls("PickAndPlaceModule.cancel")()
+            self.get_rpc_calls("BTManipulationModule.cancel")()
         except Exception:
             pass
         try:
-            self.get_rpc_calls("PickAndPlaceModule.set_gripper")(self.config.gripper_open_position)
+            self.get_rpc_calls("BTManipulationModule.set_gripper")(self.config.gripper_open_position)
         except Exception:
             pass
         return "Robot stopped — no operation was running"

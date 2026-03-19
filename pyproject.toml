@@ -328,6 +328,7 @@ docker = [
     "sortedcontainers",
     "PyTurboJPEG",
     "rerun-sdk",
+    "langchain-core",
     "open3d-unofficial-arm; platform_system == 'Linux' and platform_machine == 'aarch64'",
     "open3d>=0.18.0; platform_system != 'Linux' or platform_machine != 'aarch64'",
 ]

@@ -20,10 +20,13 @@ DimOS Units: angles=radians, distance=meters, velocity=rad/s
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import TYPE_CHECKING
 
 from xarm.wrapper import XArmAPI
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from dimos.hardware.manipulators.registry import AdapterRegistry
@@ -73,6 +76,10 @@ class XArmAdapter(ManipulatorAdapter):
             if not self._arm.connected:
                 print(f"ERROR: XArm at {self._ip} not reachable (connected=False)")
                 return False
+
+            # Clear any stale errors and enable motion before setting mode
+            self._arm.clean_error()
+            self._arm.motion_enable(enable=True)
 
             # Initialize to servo mode for high-frequency control
             self._arm.set_mode(_XARM_MODE_SERVO_CARTESIAN)  # Mode 1 = servo mode
@@ -221,6 +228,12 @@ class XArmAdapter(ManipulatorAdapter):
         # Use set_servo_angle_j for high-frequency servo control (100Hz+)
         # This only executes the last instruction, suitable for real-time control
         code: int = self._arm.set_servo_angle_j(angles, speed=100, mvacc=500)
+        if code != 0:
+            logger.error(
+                f"[XArm] set_servo_angle_j failed: code={code}, "
+                f"error_code={self._arm.error_code}, warn_code={self._arm.warn_code}, "
+                f"state={self._arm.state}, mode={self._arm.mode}"
+            )
         return code == 0
 
     def write_joint_velocities(self, velocities: list[float]) -> bool:

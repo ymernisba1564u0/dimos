@@ -29,11 +29,11 @@ RUN conda init bash && \
 WORKDIR /app
 RUN git clone https://github.com/NVlabs/GraspGen.git && cd GraspGen && git checkout main
 
-# Install PyTorch with CUDA 12.8 (must go first — spconv/torch-scatter need it)
+# Install PyTorch with CUDA 12.8
 RUN conda run -n app pip install --no-cache-dir \
     torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorch.org/whl/cu128
 
-# Install GraspGen package WITHOUT deps (its pinned torch==2.1.0 conflicts)
+# Install GraspGen package
 WORKDIR /app/GraspGen
 RUN conda run -n app pip install --no-cache-dir --no-deps -e .
 
