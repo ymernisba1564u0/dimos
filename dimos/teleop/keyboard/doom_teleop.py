@@ -5,9 +5,9 @@
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,7 +19,6 @@ from __future__ import annotations
 import math
 import os
 import threading
-from typing import Optional, Set
 
 import pygame
 
@@ -62,11 +61,11 @@ class DoomTeleop(Module):
     _clock: pygame.time.Clock | None = None
     _font: pygame.font.Font | None = None
 
-    _keys_held: Set[int] | None = None
-    _mouse_buttons_held: Set[int] | None = None
+    _keys_held: set[int] | None = None
+    _mouse_buttons_held: set[int] | None = None
     _has_focus: bool = True
 
-    _current_pose: Optional[PoseStamped] = None
+    _current_pose: PoseStamped | None = None
 
     # Tunable parameters
     _base_linear_speed: float = 0.6  # m/s
@@ -311,9 +310,7 @@ class DoomTeleop(Module):
 
         # Simple status LED
         moving = (
-            abs(twist.linear.x) > 1e-3
-            or abs(twist.linear.y) > 1e-3
-            or abs(twist.angular.z) > 1e-3
+            abs(twist.linear.x) > 1e-3 or abs(twist.linear.y) > 1e-3 or abs(twist.angular.z) > 1e-3
         )
         color = (255, 0, 0) if moving else (0, 200, 0)
         pygame.draw.circle(self._screen, color, (600, 30), 12)
@@ -324,4 +321,3 @@ class DoomTeleop(Module):
 doom_teleop = DoomTeleop.blueprint
 
 __all__ = ["DoomTeleop", "doom_teleop"]
-
