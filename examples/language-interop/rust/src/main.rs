@@ -71,7 +71,8 @@ fn main() {
             next_publish = now + PUBLISH_INTERVAL;
         }
 
-        // Sleep briefly to avoid busy-spinning
-        thread::sleep(Duration::from_millis(1));
+        // Sleep until next publish deadline (capped at 10ms) to avoid busy-spinning
+        let sleep_dur = next_publish.saturating_duration_since(Instant::now()).min(Duration::from_millis(10));
+        thread::sleep(sleep_dur);
     }
 }
