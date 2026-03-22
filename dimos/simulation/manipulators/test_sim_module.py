@@ -22,6 +22,9 @@ from dimos.simulation.manipulators.sim_module import SimulationModule
 
 
 class _DummyRPC(RPCSpec):
+    def __init__(self, **kwargs: object) -> None:  # type: ignore[no-untyped-def]
+        pass
+
     def serve_module_rpc(self, _module) -> None:  # type: ignore[no-untyped-def]
         return None
 
