@@ -40,6 +40,7 @@ Example usage::
 
 from __future__ import annotations
 
+import collections
 import enum
 import inspect
 import json
@@ -131,9 +132,11 @@ class NativeModule(Module[_NativeConfig]):
     _process: subprocess.Popen[bytes] | None = None
     _watchdog: threading.Thread | None = None
     _stopping: bool = False
+    _last_stderr_lines: collections.deque[str]
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        self._last_stderr_lines = collections.deque(maxlen=50)
         self._resolve_paths()
 
     @rpc
@@ -216,15 +219,8 @@ class NativeModule(Module[_NativeConfig]):
         module_name = type(self).__name__
         exe_name = Path(self.config.executable).name if self.config.executable else "unknown"
 
-        # Collect any remaining stderr for the crash report
-        last_stderr = ""
-        if self._process.stderr and not self._process.stderr.closed:
-            try:
-                remaining = self._process.stderr.read()
-                if remaining:
-                    last_stderr = remaining.decode("utf-8", errors="replace").strip()
-            except Exception:
-                pass
+        # Use buffered stderr lines from the reader thread for the crash report.
+        last_stderr = "\n".join(self._last_stderr_lines)
 
         logger.error(
             f"Native process crashed: {module_name} ({exe_name})",
@@ -246,10 +242,13 @@ class NativeModule(Module[_NativeConfig]):
         if stream is None:
             return
         log_fn = getattr(logger, level)
+        is_stderr = level == "warning"
         for raw in stream:
             line = raw.decode("utf-8", errors="replace").rstrip()
             if not line:
                 continue
+            if is_stderr:
+                self._last_stderr_lines.append(line)
             if self.config.log_format == LogFormat.JSON:
                 try:
                     data = json.loads(line)

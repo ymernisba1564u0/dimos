@@ -411,8 +411,10 @@ class UnityBridgeModule(Module[UnityBridgeConfig]):
         points, _ = cloud.as_numpy()
         if len(points) == 0:
             return
-        dx = points[:, 0] - self._x
-        dy = points[:, 1] - self._y
+        with self._state_lock:
+            cur_x, cur_y = self._x, self._y
+        dx = points[:, 0] - cur_x
+        dy = points[:, 1] - cur_y
         near = points[np.sqrt(dx * dx + dy * dy) < 0.5]
         if len(near) >= 10:
             with self._state_lock:
@@ -426,28 +428,36 @@ class UnityBridgeModule(Module[UnityBridgeConfig]):
         server_sock.settimeout(2.0)
         logger.info(f"TCP server on :{self.config.unity_port}")
 
-        while self._running:
-            try:
-                conn, addr = server_sock.accept()
-                logger.info(f"Unity connected from {addr}")
+        try:
+            while self._running:
                 try:
-                    self._bridge_connection(conn)
+                    conn, addr = server_sock.accept()
+                    logger.info(f"Unity connected from {addr}")
+                    try:
+                        self._bridge_connection(conn)
+                    except Exception as e:
+                        logger.info(f"Unity connection ended: {e}")
+                    finally:
+                        with self._state_lock:
+                            self._unity_connected = False
+                        conn.close()
+                except TimeoutError:
+                    continue
                 except Exception as e:
-                    logger.info(f"Unity connection ended: {e}")
-                finally:
-                    with self._state_lock:
-                        self._unity_connected = False
-                    conn.close()
-            except TimeoutError:
-                continue
-            except Exception as e:
-                if self._running:
-                    logger.warning(f"TCP server error: {e}")
-                    time.sleep(1.0)
-
-        server_sock.close()
+                    if self._running:
+                        logger.warning(f"TCP server error: {e}")
+                        time.sleep(1.0)
+        finally:
+            server_sock.close()
 
     def _bridge_connection(self, sock: socket.socket) -> None:
+        # Drain stale messages from a previous session.
+        while not self._send_queue.empty():
+            try:
+                self._send_queue.get_nowait()
+            except Empty:
+                break
+
         sock.settimeout(None)
         with self._state_lock:
             self._unity_connected = True
