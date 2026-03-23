@@ -22,10 +22,11 @@ Full navigation stack with:
 - Path follower for velocity control
 
 Odometry routing (per CMU ICRA 2022 Fig. 11):
-- Local modules (TerrainAnalysis, LocalPlanner, PathFollower, SensorScanGen):
-  use raw odometry — they work in the local odometry frame.
-- Global planners (FarPlanner, ClickToGoal): use PGO corrected_odometry —
-  they plan at the global scale and need loop-closure-corrected positions.
+- Local path modules (LocalPlanner, PathFollower, SensorScanGen):
+  use raw odometry — they follow paths in the local odometry frame.
+- Global/terrain modules (FarPlanner, ClickToGoal, TerrainAnalysis):
+  use PGO corrected_odometry — they need globally consistent positions
+  for terrain classification, visibility graphs, and goal coordinates.
 
 Data flow:
     Click → ClickToGoal (corrected_odom) → goal → FarPlanner (corrected_odom)
@@ -169,6 +170,7 @@ unitree_g1_nav_sim = autoconnect(
         # environment surrounding the vehicle and work in the odometry frame."
         (FarPlanner, "odometry", "corrected_odometry"),
         (ClickToGoal, "odometry", "corrected_odometry"),
+        (TerrainAnalysis, "odometry", "corrected_odometry"),
     ]
 ).global_config(n_workers=8, robot_model="unitree_g1", simulation=True)
 

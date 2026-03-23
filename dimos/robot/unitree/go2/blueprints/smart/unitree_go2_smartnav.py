@@ -155,6 +155,7 @@ unitree_go2_smartnav = (
             (RerunWebSocketServer, "tele_cmd_vel", "tele_cmd_vel"),
             # ClickToGoal plans at global scale — needs PGO-corrected odometry
             (ClickToGoal, "odometry", "corrected_odometry"),
+            (TerrainAnalysis, "odometry", "corrected_odometry"),
         ]
     )
     .global_config(n_workers=8, robot_model="unitree_go2")

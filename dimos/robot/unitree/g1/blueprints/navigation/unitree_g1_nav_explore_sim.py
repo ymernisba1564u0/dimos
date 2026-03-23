@@ -149,6 +149,7 @@ unitree_g1_nav_explore_sim = autoconnect(
         (UnityBridgeModule, "terrain_map", "terrain_map_ext"),
         # TARE plans at global scale — needs PGO-corrected odometry
         (TarePlanner, "odometry", "corrected_odometry"),
+        (TerrainAnalysis, "odometry", "corrected_odometry"),
     ]
 ).global_config(n_workers=8, robot_model="unitree_g1", simulation=True)
 
