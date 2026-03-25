@@ -10,3 +10,4 @@ This page explains general concepts.
 - [RPC](/docs/usage/blueprints.md#calling-the-methods-of-other-modules): how one module can call a method on another module (arguments get serialized to JSON-like binary data).
 - [Skills](/docs/usage/blueprints.md#defining-skills): An RPC function, except it can be called by an AI agent (a tool for an AI).
 - Agents: AI that has an objective, access to stream data, and is capable of calling skills as tools.
+- [REPL](/docs/usage/repl.md): Live Python shell connected to a running DimOS instance for inspection and debugging.

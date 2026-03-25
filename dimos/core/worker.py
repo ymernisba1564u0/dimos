@@ -235,6 +235,25 @@ class Worker:
         )
         return actor
 
+    def start_repl_server(self, host: str = "localhost") -> int | None:
+        """Ask the worker process to start its RPyC REPL server. Returns the port."""
+        if self._conn is None:
+            return None
+        try:
+            with self._lock:
+                self._conn.send({"type": "start_repl_server", "host": host})
+                response = self._conn.recv()
+            if response.get("error"):
+                logger.warning(
+                    "Worker failed to start REPL server",
+                    worker_id=self._worker_id,
+                    error=response["error"],
+                )
+                return None
+            return int(response["result"])
+        except (BrokenPipeError, EOFError, ConnectionResetError):
+            return None
+
     def suppress_console(self) -> None:
         if self._conn is None:
             return
@@ -256,6 +275,7 @@ class Worker:
                         logger.warning(
                             "Worker did not respond to shutdown within 5s, closing pipe.",
                             worker_id=self._worker_id,
+                            module_names=self.module_names,
                         )
             except (BrokenPipeError, EOFError, ConnectionResetError):
                 pass
@@ -363,6 +383,12 @@ def _worker_loop(conn: Connection, instances: dict[int, Any], worker_id: int) ->
                 method = getattr(instances[module_id], request["name"])
                 result = method(*request.get("args", ()), **request.get("kwargs", {}))
                 response["result"] = result
+
+            elif req_type == "start_repl_server":
+                from dimos.core.repl_server import start_worker_repl_server
+
+                port = start_worker_repl_server(instances, request.get("host", "localhost"))
+                response["result"] = port
 
             elif req_type == "suppress_console":
                 _suppress_console_output()

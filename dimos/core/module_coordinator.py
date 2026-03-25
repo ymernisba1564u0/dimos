@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from dimos.core.global_config import GlobalConfig, global_config
 from dimos.core.module import ModuleBase, ModuleSpec
+from dimos.core.repl_server import DEFAULT_REPL_PORT, ReplServer
 from dimos.core.resource import Resource
 from dimos.core.worker_manager import WorkerManager
 from dimos.utils.logging_config import setup_logger
@@ -39,6 +40,8 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
     _memory_limit: str = "auto"
     _deployed_modules: dict[type[ModuleBase], ModuleProxy]
     _stats_monitor: StatsMonitor | None = None
+    _repl_server: ReplServer | None = None
+    _module_locations: dict[str, tuple[str, int]]
 
     def __init__(
         self,
@@ -49,6 +52,7 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
         self._memory_limit = cfg.memory_limit
         self._global_config = cfg
         self._deployed_modules = {}
+        self._module_locations = {}
 
     @property
     def workers(self) -> list[Worker]:
@@ -84,6 +88,12 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
         """Number of deployed modules."""
         return len(self._deployed_modules)
 
+    @property
+    def client(self) -> WorkerManager:
+        if self._client is None:
+            raise ValueError("Client not started yet")
+        return self._client
+
     def suppress_console(self) -> None:
         """Silence console output in all worker processes."""
         if self._client is not None:
@@ -101,6 +111,10 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
             self._stats_monitor.start()
 
     def stop(self) -> None:
+        if self._repl_server is not None:
+            self._repl_server.stop()
+            self._repl_server = None
+
         if self._stats_monitor is not None:
             self._stats_monitor.stop()
             self._stats_monitor = None
@@ -121,18 +135,12 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
         global_config: GlobalConfig = global_config,
         **kwargs: Any,
     ) -> ModuleProxy:
-        if not self._client:
-            raise ValueError("Trying to dimos.deploy before the client has started")
-
-        module = self._client.deploy(module_class, global_config, kwargs)
+        module = self.client.deploy(module_class, global_config, kwargs)
         self._deployed_modules[module_class] = module  # type: ignore[assignment]
         return module  # type: ignore[return-value]
 
     def deploy_parallel(self, module_specs: list[ModuleSpec]) -> list[ModuleProxy]:
-        if not self._client:
-            raise ValueError("Not started")
-
-        modules = self._client.deploy_parallel(module_specs)
+        modules = self.client.deploy_parallel(module_specs)
         for (module_class, _, _), module in zip(module_specs, modules, strict=True):
             self._deployed_modules[module_class] = module  # type: ignore[assignment]
         return modules  # type: ignore[return-value]
@@ -153,6 +161,39 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
 
     def get_instance(self, module: type[ModuleBase]) -> ModuleProxy:
         return self._deployed_modules.get(module)  # type: ignore[return-value, no-any-return]
+
+    def list_modules(self) -> list[str]:
+        """Return the class names of all deployed modules."""
+        return [cls.__name__ for cls in self._deployed_modules]
+
+    def get_module(self, name: str) -> ModuleProxy:
+        """Look up a deployed module by class name."""
+        for cls, proxy in self._deployed_modules.items():
+            if cls.__name__ == name:
+                return proxy
+        raise KeyError(f"Module '{name}' not found. Available: {self.list_modules()}")
+
+    def get_module_location(self, name: str) -> tuple[str, int] | None:
+        """Return ``(host, port)`` of the worker RPyC server hosting *name*."""
+        return self._module_locations.get(name)
+
+    def start_repl_server(self, port: int | None = None) -> None:
+        """Start RPyC REPL servers in every worker and the main coordinator."""
+        port = port if port is not None else DEFAULT_REPL_PORT
+
+        # Start an RPyC server inside each worker process.
+        for worker in self.client.workers:
+            worker_port = worker.start_repl_server()
+            if worker_port is None:
+                logger.error(
+                    "Worker failed to start REPL server, skipping...", worker_id=worker.worker_id
+                )
+                continue
+            for module_name in worker.module_names:
+                self._module_locations[module_name] = ("localhost", worker_port)
+
+        self._repl_server = ReplServer(self, port=port)
+        self._repl_server.start()
 
     def loop(self) -> None:
         stop = threading.Event()

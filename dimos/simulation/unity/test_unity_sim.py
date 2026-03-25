@@ -83,12 +83,6 @@ def _wire(module) -> dict[str, _MockTransport]:
     return ts
 
 
-def _find_free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("", 0))
-        return s.getsockname()[1]
-
-
 def _build_ros1_pointcloud2(points: np.ndarray, frame_id: str = "map") -> bytes:
     w = ROS1Writer()
     w.u32(0)
@@ -213,9 +207,9 @@ class TestROS1Deserialization:
 
 
 class TestTCPBridge:
-    def test_handshake_and_data_flow(self):
+    def test_handshake_and_data_flow(self, find_free_port):
         """Mock Unity connects, sends a PointCloud2, verifies bridge publishes it."""
-        port = _find_free_port()
+        port = find_free_port()
         m = UnityBridgeModule(unity_binary="", unity_port=port)
         ts = _wire(m)
 

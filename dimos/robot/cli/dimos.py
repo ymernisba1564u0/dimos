@@ -30,6 +30,7 @@ import typer
 from dimos.agents.mcp.mcp_adapter import McpAdapter, McpError
 from dimos.core.global_config import GlobalConfig, global_config
 from dimos.core.run_registry import get_most_recent, is_pid_alive, stop_entry
+from dimos.robot.cli.repl import repl_command
 from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
@@ -114,6 +115,8 @@ def run(
     robot_types: list[str] = typer.Argument(..., help="Blueprints or modules to run"),
     daemon: bool = typer.Option(False, "--daemon", "-d", help="Run in background"),
     disable: list[str] = typer.Option([], "--disable", help="Module names to disable"),
+    repl: bool = typer.Option(True, "--repl/--no-repl", help="Enable RPyC REPL server"),
+    repl_port: int = typer.Option(18861, "--repl-port", help="REPL server port"),
 ) -> None:
     """Start a robot blueprint"""
     logger.info("Starting DimOS")
@@ -165,15 +168,27 @@ def run(
 
     coordinator = blueprint.build(cli_config_overrides=cli_config_overrides)
 
+    entry = RunEntry(
+        run_id=run_id,
+        pid=os.getpid(),
+        blueprint=blueprint_name,
+        started_at=datetime.now(timezone.utc).isoformat(),
+        log_dir=str(log_dir),
+        cli_args=list(robot_types),
+        config_overrides=cli_config_overrides,
+        original_argv=sys.argv,
+        repl_port=repl_port if repl else None,
+    )
+
     if daemon:
         from dimos.core.daemon import (
             daemonize,
             install_signal_handlers,
         )
 
-        # Health check before daemonizing — catch early crashes
+        # Health check before daemonizing to catch early crashes.
         if not coordinator.health_check():
-            typer.echo("Error: health check failed — a worker process died.", err=True)
+            typer.echo("Error: health check failed because a worker process died.", err=True)
             coordinator.stop()
             raise typer.Exit(1)
 
@@ -184,37 +199,27 @@ def run(
         typer.echo("✓ DimOS running in background\n")
         typer.echo(f"  Run ID:    {run_id}")
         typer.echo(f"  Log:       {log_dir}")
+        if repl:
+            typer.echo(f"  REPL:      dimos repl (port {repl_port})")
         typer.echo("  Stop:      dimos stop")
         typer.echo("  Status:    dimos status")
 
         coordinator.suppress_console()
 
         daemonize(log_dir)
+        entry.pid = os.getpid()  # update to daemon's PID after double-fork
 
-        entry = RunEntry(
-            run_id=run_id,
-            pid=os.getpid(),
-            blueprint=blueprint_name,
-            started_at=datetime.now(timezone.utc).isoformat(),
-            log_dir=str(log_dir),
-            cli_args=list(robot_types),
-            config_overrides=cli_config_overrides,
-            original_argv=sys.argv,
-        )
+        # Start REPL server after daemonize (threads don't survive fork).
+        if repl:
+            coordinator.start_repl_server(port=repl_port)
+
         entry.save()
         install_signal_handlers(entry, coordinator)
         coordinator.loop()
     else:
-        entry = RunEntry(
-            run_id=run_id,
-            pid=os.getpid(),
-            blueprint=blueprint_name,
-            started_at=datetime.now(timezone.utc).isoformat(),
-            log_dir=str(log_dir),
-            cli_args=list(robot_types),
-            config_overrides=cli_config_overrides,
-            original_argv=sys.argv,
-        )
+        if repl:
+            coordinator.start_repl_server(port=repl_port)
+
         entry.save()
         try:
             coordinator.loop()
@@ -464,6 +469,15 @@ def restart(
     except OSError as exc:
         typer.echo(f"Error: failed to restart — {exc}", err=True)
         raise typer.Exit(1)
+
+
+@main.command()
+def repl(
+    host: str = typer.Option("localhost", "--host", "-H", help="Host to connect to"),
+    port: int | None = typer.Option(None, "--port", "-p", help="REPL server port (auto-detected)"),
+) -> None:
+    """Connect to a running DimOS instance for interactive debugging."""
+    repl_command(host, port)
 
 
 @main.command()

@@ -14,10 +14,13 @@
 
 import asyncio
 import os
+import socket
 import threading
+import time
 
 from dotenv import load_dotenv
 import pytest
+import rpyc
 
 from dimos.core.module_coordinator import ModuleCoordinator
 from dimos.protocol.service.lcmservice import autoconf
@@ -177,3 +180,49 @@ def monitor_threads(request):
             f"Non-closed threads created during this test. Thread names: {thread_names}. "
             "Please look at the first test that fails and fix that."
         )
+
+
+@pytest.fixture
+def find_free_port():
+    def _find_free_port() -> int:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("", 0))
+            return s.getsockname()[1]
+
+    return _find_free_port
+
+
+@pytest.fixture
+def wait_until_rpyc_connectable():
+    def _wait_connectable(host: str, port: int, timeout: float = 2.0) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                c = rpyc.connect(host, port)
+                c.close()
+                return
+            except ConnectionRefusedError:
+                time.sleep(0.01)
+        raise TimeoutError(f"Server at {host}:{port} did not become connectable")
+
+    return _wait_connectable
+
+
+class _StubCoordinator:
+    def __init__(self, modules=None, locations=None):
+        self._modules = modules or []
+        self._locations = locations or {}
+
+    def list_modules(self):
+        return list(self._modules)
+
+    def get_module_location(self, name):
+        return self._locations.get(name)
+
+
+@pytest.fixture
+def make_stub_coordinator():
+    def _make(**modules):
+        return _StubCoordinator(**modules)
+
+    return _make

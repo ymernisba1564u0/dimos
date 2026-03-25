@@ -67,6 +67,8 @@ dimos run <blueprint> [<blueprint> ...] [--daemon] [--disable <module> ...]
 |--------|-------------|
 | `--daemon`, `-d` | Run in background (double-fork, health check, writes run registry) |
 | `--disable` | Module class names to exclude from the blueprint |
+| `--repl` / `--no-repl` | Enable RPyC REPL server (default: enabled) |
+| `--repl-port` | REPL server port (default: `18861`) |
 
 ```bash
 # Foreground (Ctrl-C to stop)
@@ -170,6 +172,25 @@ All processes (main + workers) write to the same `main.jsonl`. Filter by module:
 
 ```bash
 dimos log --json | jq 'select(.logger | contains("RerunBridge"))'
+```
+
+### `dimos repl`
+
+Connect to a running DimOS instance for interactive debugging. See [REPL](/docs/usage/repl.md) for full details.
+
+```bash
+dimos repl [--host HOST] [--port PORT]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--host`, `-H` | Host to connect to (default: `localhost`) |
+| `--port`, `-p` | REPL server port (auto-detected from run registry) |
+
+```bash
+dimos repl                     # auto-detect port from run registry
+dimos repl --port 19000        # connect to a custom port
+dimos repl --host 192.168.1.5  # connect to a remote instance
 ```
 
 ### `dimos list`

@@ -27,6 +27,7 @@ dimos run unitree-g1-agentic --robot-ip 192.168.123.161   # real G1 hardware
 
 # --- Inspect & control ---
 dimos status
+dimos repl             # live Python shell into the running instance
 dimos log              # last 50 lines, human-readable
 dimos log -f           # follow/tail in real time
 dimos agent-send "say hello"
@@ -87,6 +88,43 @@ unitree_go2_agentic = autoconnect(
 ```
 
 Reference: `dimos/robot/unitree/go2/blueprints/agentic/unitree_go2_agentic.py`
+
+---
+
+## REPL (interactive debugging)
+
+The REPL gives you a live Python shell connected to a running DimOS instance. Enabled by default with `dimos run`.
+
+```bash
+# In one terminal:
+dimos --replay run unitree-go2-agentic --daemon
+
+# In another:
+dimos repl
+```
+
+Inside the REPL:
+
+```python
+>>> modules()                          # list deployed module class names
+['GO2Connection', 'RerunBridge', 'McpServer', ...]
+
+>>> wfe = get('WavefrontFrontierExplorer')  # get a live module instance
+>>> wfe.begin_exploration()
+"Started exploring."
+
+>>> coordinator.list_modules()         # access the coordinator directly
+```
+
+| Helper | Description |
+|--------|-------------|
+| `coordinator` | The `ModuleCoordinator` instance |
+| `modules()` | List deployed module names |
+| `get(name)` | Get a live module instance by class name (connects to its worker process via RPyC) |
+
+Options: `--repl/--no-repl` on `dimos run`, `--repl-port` (default `18861`), `--host`/`--port` on `dimos repl`. Port is auto-detected from the run registry.
+
+Full docs: `docs/usage/repl.md`
 
 ---
 
@@ -209,6 +247,7 @@ Every `GlobalConfig` field is a CLI flag: `--robot-ip`, `--simulation/--no-simul
 | `dimos list` | List all non-demo blueprints |
 | `dimos show-config` | Print resolved GlobalConfig values |
 | `dimos log [-f] [-n N] [--json] [-r <run-id>]` | View per-run logs |
+| `dimos repl` | Interactive Python shell connected to a running instance ([docs](/docs/usage/repl.md)) |
 | `dimos mcp list-tools / call / status / modules` | MCP tools (requires McpServer in blueprint) |
 | `dimos agent-send "<text>"` | Send text to the running agent via LCM |
 | `dimos lcmspy / agentspy / humancli / top` | Debug/diagnostic tools |
@@ -379,6 +418,7 @@ CI asserts the file is current — if it's stale, CI fails.
 - Visualization: `docs/usage/visualization.md`
 - Configuration: `docs/usage/configuration.md`
 - Testing: `docs/development/testing.md`
+- REPL: `docs/usage/repl.md`
 - CLI / dimos run: `docs/development/dimos_run.md`
 - LFS data: `docs/development/large_file_management.md`
 - Agent system: `docs/agents/`
