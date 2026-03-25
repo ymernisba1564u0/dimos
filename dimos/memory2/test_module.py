@@ -139,21 +139,22 @@ def test_unbound_str() -> None:
 # -- StreamModule tests --
 
 
-def test_stream_module_blueprint_creates_ports() -> None:
-    """StreamModule.blueprint() creates a Blueprint with correct In/Out ports."""
+def test_stream_module_subclass_blueprint() -> None:
+    """StreamModule subclass creates a Blueprint with correct In/Out ports."""
+    from dimos.core.stream import In, Out
     from dimos.memory2.module import StreamModule
 
     class Identity(Transformer[str, str]):
         def __call__(self, upstream: Iterator[Observation[str]]) -> Iterator[Observation[str]]:
             yield from upstream
 
-    bp = StreamModule.blueprint(
-        pipeline=Identity(),
-        input=("messages", str),
-        output=("processed", str),
-    )
+    class MyModule(StreamModule):
+        pipeline = Stream().transform(Identity())
+        messages: In[str]
+        processed: Out[str]
 
-    # Blueprint should have one atom with the right streams
+    bp = MyModule.blueprint()
+
     assert len(bp.blueprints) == 1
     atom = bp.blueprints[0]
     stream_names = {s.name for s in atom.streams}
@@ -161,8 +162,9 @@ def test_stream_module_blueprint_creates_ports() -> None:
     assert "processed" in stream_names
 
 
-def test_stream_module_blueprint_with_unbound_pipeline() -> None:
-    """StreamModule.blueprint() works with unbound Stream pipelines."""
+def test_stream_module_with_transformer_pipeline() -> None:
+    """StreamModule accepts a bare Transformer as pipeline."""
+    from dimos.core.stream import In, Out
     from dimos.memory2.module import StreamModule
 
     class Double(Transformer[int, int]):
@@ -170,12 +172,12 @@ def test_stream_module_blueprint_with_unbound_pipeline() -> None:
             for obs in upstream:
                 yield obs.derive(data=obs.data * 2)
 
-    pipeline = Stream().transform(Double())
-    bp = StreamModule.blueprint(
-        pipeline=pipeline,
-        input=("numbers", int),
-        output=("doubled", int),
-    )
+    class Doubler(StreamModule):
+        pipeline = Double()
+        numbers: In[int]
+        doubled: Out[int]
+
+    bp = Doubler.blueprint()
 
     assert len(bp.blueprints) == 1
     atom = bp.blueprints[0]

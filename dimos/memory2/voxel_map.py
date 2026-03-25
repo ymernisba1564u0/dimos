@@ -16,13 +16,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from dimos.mapping.voxels import VoxelGrid
 from dimos.memory2.transform import Transformer
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from dimos.mapping.voxels import VoxelGrid
     from dimos.memory2.type.observation import Observation
 
 
@@ -66,6 +66,8 @@ class VoxelMap(Transformer[PointCloud2, PointCloud2]):
     def __call__(
         self, upstream: Iterator[Observation[PointCloud2]]
     ) -> Iterator[Observation[PointCloud2]]:
+        from dimos.mapping.voxels import VoxelGrid
+
         grid = VoxelGrid(
             voxel_size=self.voxel_size,
             block_count=self.block_count,

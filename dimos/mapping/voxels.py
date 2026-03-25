@@ -13,15 +13,10 @@
 # limitations under the License.
 
 import time
-from typing import Any
 
 import open3d as o3d  # type: ignore[import-untyped]
 import open3d.core as o3c  # type: ignore[import-untyped]
-from reactivex.disposable import Disposable
 
-from dimos.core.core import rpc
-from dimos.core.module import Module, ModuleConfig
-from dimos.core.stream import In, Out
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.utils.decorators.decorators import simple_mcache
 from dimos.utils.logging_config import setup_logger
@@ -157,64 +152,41 @@ class VoxelGrid:
         self._voxel_hashmap = None  # type: ignore[assignment]
 
 
-class Config(ModuleConfig):
-    frame_id: str = "world"
+from dimos.core.module import ModuleConfig
+from dimos.core.stream import In, Out
+from dimos.memory2.module import StreamModule
+from dimos.memory2.stream import Stream
+from dimos.memory2.voxel_map import VoxelMap
+
+
+class VoxelGridMapperConfig(ModuleConfig):
+    """Configuration for VoxelGridMapper."""
+
     voxel_size: float = 0.05
     block_count: int = 2_000_000
     device: str = "CUDA:0"
     carve_columns: bool = True
+    frame_id: str = "world"
 
 
-class VoxelGridMapper(Module[Config]):
-    """Accumulate lidar point clouds into a global voxel map.
+class VoxelGridMapper(StreamModule[VoxelGridMapperConfig]):
+    """Accumulate lidar point clouds into a global voxel map."""
 
-    Uses a memory2 stream pipeline internally:
-    ``In[lidar] → MemoryStore → .live().transform(VoxelMap) → Out[global_map]``
-    """
+    default_config = VoxelGridMapperConfig
 
-    default_config = Config
+    def pipeline(self, stream: Stream[PointCloud2]) -> Stream[PointCloud2]:
+        return stream.transform(
+            VoxelMap(
+                voxel_size=self.config.voxel_size,
+                block_count=self.config.block_count,
+                device=self.config.device,
+                carve_columns=self.config.carve_columns,
+                frame_id=self.config.frame_id,
+            )
+        )
 
     lidar: In[PointCloud2]
     global_map: Out[PointCloud2]
-
-    def __init__(self, **kwargs: Any) -> None:
-        from dimos.memory2.store.memory import MemoryStore
-
-        super().__init__(**kwargs)
-        self._store = MemoryStore()
-
-    @rpc
-    def start(self) -> None:
-        from dimos.memory2.voxel_map import VoxelMap
-
-        super().start()
-        self._store.start()
-
-        lidar = self._store.stream("lidar", PointCloud2)
-
-        # In → Store: append every incoming frame
-        unsub = self.lidar.subscribe(lambda msg: lidar.append(msg))
-        self._disposables.add(Disposable(unsub))
-
-        # Store → Transform → Out: live stream pipeline
-        self._disposables.add(
-            lidar.live()
-            .transform(
-                VoxelMap(
-                    voxel_size=self.config.voxel_size,
-                    block_count=self.config.block_count,
-                    device=self.config.device,
-                    carve_columns=self.config.carve_columns,
-                    emit_every=1,
-                )
-            )
-            .publish(self.global_map)
-        )
-
-    @rpc
-    def stop(self) -> None:
-        super().stop()
-        self._store.stop()
 
 
 def ensure_tensor_pcd(
@@ -243,4 +215,5 @@ def ensure_legacy_pcd(
         "Input must be a legacy PointCloud or a tensor PointCloud"
     )
 
+    return pcd_any.to_legacy()
     return pcd_any.to_legacy()
