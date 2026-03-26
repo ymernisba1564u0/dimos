@@ -35,6 +35,7 @@ from dimos.core.module import ModuleConfig
 from dimos.core.rpc_client import ModuleProxyProtocol, RpcCall
 from dimos.protocol.rpc.pubsubrpc import LCMRPC
 from dimos.utils.logging_config import setup_logger
+from dimos.utils.thread_utils import ThreadSafeVal
 from dimos.visualization.rerun.bridge import RERUN_GRPC_PORT, RERUN_WEB_PORT
 
 if TYPE_CHECKING:
@@ -125,163 +126,6 @@ def is_docker_module(module_class: type) -> bool:
     )
 
 
-# Docker helpers
-
-
-def _run(cmd: list[str], *, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
-    logger.debug(f"exec: {' '.join(cmd)}")
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
-
-
-def _remove_container(cfg: DockerModuleConfig, name: str) -> None:
-    _run([cfg.docker_bin, "rm", "-f", name], timeout=DOCKER_CMD_TIMEOUT)
-
-
-def _is_container_running(cfg: DockerModuleConfig, name: str) -> bool:
-    r = _run(
-        [cfg.docker_bin, "inspect", "-f", "{{.State.Running}}", name],
-        timeout=DOCKER_STATUS_TIMEOUT,
-    )
-    return r.returncode == 0 and r.stdout.strip() == "true"
-
-
-def _tail_logs(cfg: DockerModuleConfig, name: str, n: int = LOG_TAIL_LINES) -> str:
-    r = _run([cfg.docker_bin, "logs", "--tail", str(n), name], timeout=DOCKER_CMD_TIMEOUT)
-    out = (r.stdout or "").rstrip()
-    err = (r.stderr or "").rstrip()
-    return out + ("\n" + err if err else "")
-
-
-def _extract_module_config(cfg: DockerModuleConfig) -> dict[str, Any]:
-    """Extract JSON-serializable config fields for the container (excludes docker_* fields)."""
-    out: dict[str, Any] = {}
-    for k, v in cfg.__dict__.items():
-        if k.startswith("docker_") or isinstance(v, type) or callable(v):
-            continue
-        try:
-            json.dumps(v)
-            out[k] = v
-        except (TypeError, ValueError):
-            level = "debug" if k.startswith("_") else "warning"
-            getattr(logger, level)(f"Config field '{k}' not JSON-serializable, skipping")
-    return out
-
-
-# Image building and Dockerfile conversion
-
-
-_BUILD_HASH_LABEL = "dimos.build.hash"
-
-# the way of detecting already-converted Dockerfiles (UUID ensures uniqueness)
-DIMOS_SENTINEL = "DIMOS-MODULE-CONVERSION-427593ae-c6e8-4cf1-9b2d-ee81a420a5dc"
-
-# Footer appended to Dockerfiles for DimOS module conversion
-DIMOS_FOOTER = f"""
-# ==== {DIMOS_SENTINEL} ====
-# Copy DimOS source from build context
-COPY dimos /dimos/source/dimos/
-COPY pyproject.toml /dimos/source/
-COPY docker/python/module-install.sh /tmp/module-install.sh
-
-# Install DimOS and create entrypoint
-RUN bash /tmp/module-install.sh /dimos/source && rm /tmp/module-install.sh
-
-ENTRYPOINT ["/dimos/entrypoint.sh"]
-"""
-
-
-def _convert_dockerfile(dockerfile: Path) -> Path:
-    """Append DimOS footer to Dockerfile. Returns path to converted file."""
-    content = dockerfile.read_text()
-
-    # Already converted?
-    if DIMOS_SENTINEL in content:
-        return dockerfile
-
-    logger.info(f"Converting {dockerfile.name} to DimOS format")
-
-    converted = dockerfile.parent / f".{dockerfile.name}.ignore"
-    converted.write_text(content.rstrip() + "\n" + DIMOS_FOOTER.lstrip("\n"))
-    return converted
-
-
-def _compute_build_hash(cfg: DockerModuleConfig) -> str:
-    """Hash Dockerfile contents and build args."""
-    if cfg.docker_file is None:
-        raise ValueError("docker_file is required for computing build hash")
-    digest = hashlib.sha256()
-    digest.update(cfg.docker_file.read_bytes())
-    for key, val in sorted(cfg.docker_build_args.items()):
-        digest.update(f"{key}={val}".encode())
-    for arg in cfg.docker_build_extra_args:
-        digest.update(arg.encode())
-    return digest.hexdigest()
-
-
-def _get_image_build_hash(cfg: DockerModuleConfig) -> str | None:
-    """Read the build hash label from an existing Docker image."""
-    r = subprocess.run(
-        [
-            cfg.docker_bin,
-            "image",
-            "inspect",
-            "-f",
-            '{{index .Config.Labels "' + _BUILD_HASH_LABEL + '"}}',
-            cfg.docker_image,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=DOCKER_CMD_TIMEOUT,
-        check=False,
-    )
-    if r.returncode != 0:
-        return None
-    value = r.stdout.strip()
-    # docker prints "<no value>" when the label is missing
-    return value if value and value != "<no value>" else None
-
-
-def build_image(cfg: DockerModuleConfig) -> None:
-    """Build Docker image using footer mode conversion."""
-    if cfg.docker_file is None:
-        raise ValueError("docker_file is required for building Docker images")
-
-    build_hash = _compute_build_hash(cfg)
-    dockerfile = _convert_dockerfile(cfg.docker_file)
-
-    context = cfg.docker_build_context or cfg.docker_file.parent
-    cmd = [cfg.docker_bin, "build", "-t", cfg.docker_image, "-f", str(dockerfile)]
-    cmd.extend(["--label", f"{_BUILD_HASH_LABEL}={build_hash}"])
-    for k, v in cfg.docker_build_args.items():
-        cmd.extend(["--build-arg", f"{k}={v}"])
-    cmd.extend(cfg.docker_build_extra_args)
-    cmd.append(str(context))
-
-    logger.info(f"Building Docker image: {cfg.docker_image}")
-    # Stream stdout to terminal so the user sees build progress, but capture
-    # stderr separately so we can include it in the error message on failure.
-    result = subprocess.run(cmd, text=True, stderr=subprocess.PIPE)
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"Docker build failed with exit code {result.returncode}\nSTDERR:\n{result.stderr}"
-        )
-
-
-def image_exists(cfg: DockerModuleConfig) -> bool:
-    """Check if the configured Docker image exists locally."""
-    r = subprocess.run(
-        [cfg.docker_bin, "image", "inspect", cfg.docker_image],
-        capture_output=True,
-        text=True,
-        timeout=DOCKER_CMD_TIMEOUT,
-        check=False,
-    )
-    return r.returncode == 0
-
-
-# Host-side Docker-backed Module handle
-
-
 class DockerModuleOuter(ModuleProxyProtocol):
     """
     Host-side handle for a module running inside Docker.
@@ -311,7 +155,7 @@ class DockerModuleOuter(ModuleProxyProtocol):
         self._args = args
         self._kwargs = kwargs
         self._running = threading.Event()
-        self._is_built = False
+        self._is_built = ThreadSafeVal(False)
         self.remote_name = module_class.__name__
         # Derive container name from image + class name: "my-registry/foo:v2" → "dimos_myclass_foo_v2"
         image_ref = config.docker_image.rsplit("/", 1)[-1]
@@ -335,7 +179,7 @@ class DockerModuleOuter(ModuleProxyProtocol):
         Idempotent — safe to call multiple times. Has no RPC timeout since
         this runs host-side (not via RPC to a worker process).
         """
-        if self._is_built:
+        if self._is_built.get():
             return
 
         config = self.config
@@ -386,7 +230,7 @@ class DockerModuleOuter(ModuleProxyProtocol):
             # docker run -d returns before Module.__init__ finishes in the container,
             # so we poll until the RPC server is reachable before returning.
             self._wait_for_rpc()
-            self._is_built = True
+            self._is_built.set(True)
         except Exception:
             with suppress(Exception):
                 self._cleanup()
@@ -675,9 +519,6 @@ class DockerModuleOuter(ModuleProxyProtocol):
 DockerModule = DockerModuleOuter
 
 
-# Container-side runner
-
-
 class DockerModuleInner:
     """Runs a module inside Docker container. Blocks until SIGTERM/SIGINT."""
 
@@ -713,6 +554,159 @@ class DockerModuleInner:
         self._shutdown.wait()
 
 
+# ---------------------------------------------------------------------------
+# Helpers (private — used by the classes above)
+# ---------------------------------------------------------------------------
+
+
+def _run(cmd: list[str], *, timeout: float | None = None) -> subprocess.CompletedProcess[str]:
+    logger.debug(f"exec: {' '.join(cmd)}")
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+
+
+def _remove_container(cfg: DockerModuleConfig, name: str) -> None:
+    _run([cfg.docker_bin, "rm", "-f", name], timeout=DOCKER_CMD_TIMEOUT)
+
+
+def _is_container_running(cfg: DockerModuleConfig, name: str) -> bool:
+    r = _run(
+        [cfg.docker_bin, "inspect", "-f", "{{.State.Running}}", name],
+        timeout=DOCKER_STATUS_TIMEOUT,
+    )
+    return r.returncode == 0 and r.stdout.strip() == "true"
+
+
+def _tail_logs(cfg: DockerModuleConfig, name: str, n: int = LOG_TAIL_LINES) -> str:
+    r = _run([cfg.docker_bin, "logs", "--tail", str(n), name], timeout=DOCKER_CMD_TIMEOUT)
+    out = (r.stdout or "").rstrip()
+    err = (r.stderr or "").rstrip()
+    return out + ("\n" + err if err else "")
+
+
+def _extract_module_config(cfg: DockerModuleConfig) -> dict[str, Any]:
+    """Extract JSON-serializable config fields for the container (excludes docker_* fields)."""
+    out: dict[str, Any] = {}
+    for k, v in cfg.__dict__.items():
+        if k.startswith("docker_") or isinstance(v, type) or callable(v):
+            continue
+        try:
+            json.dumps(v)
+            out[k] = v
+        except (TypeError, ValueError):
+            level = "debug" if k.startswith("_") else "warning"
+            getattr(logger, level)(f"Config field '{k}' not JSON-serializable, skipping")
+    return out
+
+
+_BUILD_HASH_LABEL = "dimos.build.hash"
+
+# the way of detecting already-converted Dockerfiles (UUID ensures uniqueness)
+DIMOS_SENTINEL = "DIMOS-MODULE-CONVERSION-427593ae-c6e8-4cf1-9b2d-ee81a420a5dc"
+
+# Footer appended to Dockerfiles for DimOS module conversion
+DIMOS_FOOTER = f"""
+# ==== {DIMOS_SENTINEL} ====
+# Copy DimOS source from build context
+COPY dimos /dimos/source/dimos/
+COPY pyproject.toml /dimos/source/
+COPY docker/python/module-install.sh /tmp/module-install.sh
+
+# Install DimOS and create entrypoint
+RUN bash /tmp/module-install.sh /dimos/source && rm /tmp/module-install.sh
+
+ENTRYPOINT ["/dimos/entrypoint.sh"]
+"""
+
+
+def _convert_dockerfile(dockerfile: Path) -> Path:
+    """Append DimOS footer to Dockerfile. Returns path to converted file."""
+    content = dockerfile.read_text()
+
+    # Already converted?
+    if DIMOS_SENTINEL in content:
+        return dockerfile
+
+    logger.info(f"Converting {dockerfile.name} to DimOS format")
+
+    converted = dockerfile.parent / f".{dockerfile.name}.ignore"
+    converted.write_text(content.rstrip() + "\n" + DIMOS_FOOTER.lstrip("\n"))
+    return converted
+
+
+def _compute_build_hash(cfg: DockerModuleConfig) -> str:
+    """Hash Dockerfile contents and build args."""
+    if cfg.docker_file is None:
+        raise ValueError("docker_file is required for computing build hash")
+    digest = hashlib.sha256()
+    digest.update(cfg.docker_file.read_bytes())
+    for key, val in sorted(cfg.docker_build_args.items()):
+        digest.update(f"{key}={val}".encode())
+    for arg in cfg.docker_build_extra_args:
+        digest.update(arg.encode())
+    return digest.hexdigest()
+
+
+def _get_image_build_hash(cfg: DockerModuleConfig) -> str | None:
+    """Read the build hash label from an existing Docker image."""
+    r = subprocess.run(
+        [
+            cfg.docker_bin,
+            "image",
+            "inspect",
+            "-f",
+            '{{index .Config.Labels "' + _BUILD_HASH_LABEL + '"}}',
+            cfg.docker_image,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=DOCKER_CMD_TIMEOUT,
+        check=False,
+    )
+    if r.returncode != 0:
+        return None
+    value = r.stdout.strip()
+    # docker prints "<no value>" when the label is missing
+    return value if value and value != "<no value>" else None
+
+
+def build_image(cfg: DockerModuleConfig) -> None:
+    """Build Docker image using footer mode conversion."""
+    if cfg.docker_file is None:
+        raise ValueError("docker_file is required for building Docker images")
+
+    build_hash = _compute_build_hash(cfg)
+    dockerfile = _convert_dockerfile(cfg.docker_file)
+
+    context = cfg.docker_build_context or cfg.docker_file.parent
+    cmd = [cfg.docker_bin, "build", "-t", cfg.docker_image, "-f", str(dockerfile)]
+    cmd.extend(["--label", f"{_BUILD_HASH_LABEL}={build_hash}"])
+    for k, v in cfg.docker_build_args.items():
+        cmd.extend(["--build-arg", f"{k}={v}"])
+    cmd.extend(cfg.docker_build_extra_args)
+    cmd.append(str(context))
+
+    logger.info(f"Building Docker image: {cfg.docker_image}")
+    # Stream stdout to terminal so the user sees build progress, but capture
+    # stderr separately so we can include it in the error message on failure.
+    result = subprocess.run(cmd, text=True, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Docker build failed with exit code {result.returncode}\nSTDERR:\n{result.stderr}"
+        )
+
+
+def image_exists(cfg: DockerModuleConfig) -> bool:
+    """Check if the configured Docker image exists locally."""
+    r = subprocess.run(
+        [cfg.docker_bin, "image", "inspect", cfg.docker_image],
+        capture_output=True,
+        text=True,
+        timeout=DOCKER_CMD_TIMEOUT,
+        check=False,
+    )
+    return r.returncode == 0
+
+
 def _install_signal_handlers(runner: DockerModuleInner) -> None:
     def shutdown(_sig: int, _frame: Any) -> None:
         runner.stop()
@@ -733,6 +727,10 @@ def _cli_run(payload_json: str) -> None:
     runner.wait()
 
 
+# Container-side entrypoint: invoked as `python -m dimos.core.docker_module run --payload '...'`
+# by the generated entrypoint.sh inside Docker containers (see docker/python/module-install.sh).
+# This is what makes `DockerModuleInner` actually run — without it, containers would have no
+# way to bootstrap the module from the JSON payload that `DockerModuleOuter` passes via `docker run`.
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="dimos.core.docker_module")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -754,11 +752,11 @@ if __name__ == "__main__":
 
 
 __all__ = [
+    "DIMOS_FOOTER",
     "DockerModule",
     "DockerModuleConfig",
     "DockerModuleInner",
     "DockerModuleOuter",
-    "DIMOS_FOOTER",
     "build_image",
     "image_exists",
     "is_docker_module",

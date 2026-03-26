@@ -23,7 +23,8 @@ from dimos.core.module import ModuleBase, ModuleSpec
 from dimos.core.rpc_client import RPCClient
 from dimos.core.worker import Worker
 from dimos.utils.logging_config import setup_logger
-from dimos.utils.safe_thread_map import ExceptionGroup, safe_thread_map
+from dimos.utils.thread_utils import safe_thread_map
+from dimos.utils.typing_utils import ExceptionGroup
 
 logger = setup_logger()
 

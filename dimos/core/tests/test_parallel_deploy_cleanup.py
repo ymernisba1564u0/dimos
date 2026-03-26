@@ -24,7 +24,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from dimos.utils.safe_thread_map import ExceptionGroup
+from dimos.utils.typing_utils import ExceptionGroup
 
 
 class TestDockerWorkerManagerPartialFailure:

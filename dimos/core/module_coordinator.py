@@ -24,7 +24,8 @@ from dimos.core.module import ModuleBase, ModuleSpec
 from dimos.core.resource import Resource
 from dimos.core.worker_manager import WorkerManager
 from dimos.utils.logging_config import setup_logger
-from dimos.utils.safe_thread_map import ExceptionGroup, safe_thread_map
+from dimos.utils.thread_utils import safe_thread_map
+from dimos.utils.typing_utils import ExceptionGroup
 
 if TYPE_CHECKING:
     from dimos.core.resource_monitor.monitor import StatsMonitor
@@ -44,6 +45,7 @@ class ModuleCoordinator(Resource):  # type: ignore[misc]
       (it may not do all of that at time of writing but that is the intention/job of this class)
     - Modules shouldn't be deployed on their own (except for testing)
     """
+
     _client: WorkerManager | None = None
     _global_config: GlobalConfig
     _n: int | None = None

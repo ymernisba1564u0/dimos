@@ -27,7 +27,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from dimos.core.docker_module import DockerModuleOuter, DockerModuleConfig, is_docker_module
+from dimos.core.docker_module import DockerModuleConfig, DockerModuleOuter, is_docker_module
 from dimos.core.global_config import global_config
 from dimos.core.module import Module
 from dimos.core.module_coordinator import ModuleCoordinator

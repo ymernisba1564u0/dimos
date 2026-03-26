@@ -17,7 +17,8 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 from dimos.core.module import ModuleSpec
-from dimos.utils.safe_thread_map import ExceptionGroup, safe_thread_map
+from dimos.utils.thread_utils import safe_thread_map
+from dimos.utils.typing_utils import ExceptionGroup
 
 if TYPE_CHECKING:
     from dimos.core.docker_module import DockerModuleOuter
