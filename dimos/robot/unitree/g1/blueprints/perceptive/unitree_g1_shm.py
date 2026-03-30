@@ -32,7 +32,7 @@ unitree_g1_shm = autoconnect(
         }
     ),
     vis_module(
-        global_config.viewer,
+        viewer_backend=global_config.viewer,
         foxglove_config={"shm_channels": ["/color_image#sensor_msgs.Image"]},
     ),
 )

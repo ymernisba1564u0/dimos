@@ -55,11 +55,7 @@ class Config(ModuleConfig):
     port: int = 3030
     start_timeout: float = 10.0  # seconds to wait for the server to bind
 
-# QUALITY LEVEL: temporary
-# ideally this would be part of the rerun bridge
-# SUPER ideally this module shouldn't exist at all (we should just patch rerun properly)
-# but for now, I just need this to get the g1 stuff working
-# the vis_module manages when to add the RerunWebSocketServer as a module alongside the RerunBridgeModule
+
 class RerunWebSocketServer(Module[Config]):
     """Receives dimos-viewer WebSocket events and publishes them as DimOS streams.
 

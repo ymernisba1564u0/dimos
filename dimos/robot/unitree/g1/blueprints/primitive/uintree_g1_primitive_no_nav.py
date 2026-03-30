@@ -107,7 +107,7 @@ rerun_config = {
     },
 }
 
-_with_vis = vis_module(global_config.viewer, rerun_config=rerun_config)
+_with_vis = vis_module(viewer_backend=global_config.viewer, rerun_config=rerun_config)
 
 
 def _create_webcam() -> Webcam:

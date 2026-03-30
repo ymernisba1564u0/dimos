@@ -19,7 +19,6 @@ from typing import Any
 
 from dimos.core.blueprints import Blueprint, autoconnect
 from dimos.core.global_config import ViewerBackend
-from dimos.protocol.pubsub.impl.lcmpubsub import LCM
 
 
 def vis_module(
@@ -48,14 +47,13 @@ def vis_module(
             },
         )
     """
+    from dimos.visualization.rerun.websocket_server import RerunWebSocketServer
     from dimos.web.websocket_vis.websocket_vis_module import WebsocketVisModule
 
     if foxglove_config is None:
         foxglove_config = {}
     if rerun_config is None:
         rerun_config = {}
-    rerun_config = {**rerun_config}
-    rerun_config.setdefault("pubsubs", [LCM()])
 
     match viewer_backend:
         case "foxglove":
@@ -63,25 +61,25 @@ def vis_module(
 
             return autoconnect(
                 FoxgloveBridge.blueprint(**foxglove_config),
+                RerunWebSocketServer.blueprint(),
                 WebsocketVisModule.blueprint(),
             )
-        case "rerun" | "rerun-web":
+        case "rerun" | "rerun-web" | "rerun-connect":
+            from dimos.protocol.pubsub.impl.lcmpubsub import LCM
             from dimos.visualization.rerun.bridge import _BACKEND_TO_MODE, RerunBridgeModule
-            from dimos.visualization.rerun.websocket_server import RerunWebSocketServer
 
+            rerun_config = {**rerun_config}
+            rerun_config.setdefault("pubsubs", [LCM()])
             viewer_mode = _BACKEND_TO_MODE.get(viewer_backend, "native")
             return autoconnect(
                 RerunBridgeModule.blueprint(viewer_mode=viewer_mode, **rerun_config),
                 RerunWebSocketServer.blueprint(),
                 WebsocketVisModule.blueprint(),
             )
-        case "rerun-connect":
-            from dimos.visualization.rerun.bridge import RerunBridgeModule
-            from dimos.visualization.rerun.websocket_server import RerunWebSocketServer
-
-            return autoconnect(
-                RerunBridgeModule.blueprint(viewer_mode="connect", **rerun_config),
-                RerunWebSocketServer.blueprint(),
-            )
-        case _:
+        case "none":
             return autoconnect(WebsocketVisModule.blueprint())
+        case _:
+            raise ValueError(
+                f"Unknown viewer_backend {viewer_backend!r}. "
+                f"Expected one of: rerun, rerun-web, rerun-connect, foxglove, none"
+            )

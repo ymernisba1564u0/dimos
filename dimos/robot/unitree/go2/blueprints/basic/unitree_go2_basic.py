@@ -113,7 +113,7 @@ rerun_config = {
 _with_vis = autoconnect(
     _transports_base,
     vis_module(
-        global_config.viewer,
+        viewer_backend=global_config.viewer,
         rerun_config=rerun_config,
         foxglove_config={"shm_channels": ["/color_image#sensor_msgs.Image"]},
     ),
