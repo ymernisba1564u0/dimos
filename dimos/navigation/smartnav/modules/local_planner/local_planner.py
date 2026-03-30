@@ -41,7 +41,7 @@ def _default_paths_dir() -> str:
 class LocalPlannerConfig(NativeModuleConfig):
     """Config for the local planner native module."""
 
-    cwd: str | None = "."
+    cwd: str | None = "cpp"
     executable: str = "result/bin/local_planner"
     build_command: str | None = "nix build . -o result"
     rebuild_on_change: list[PathEntry] | None = [

@@ -32,7 +32,7 @@ from dimos.utils.change_detect import Glob, PathEntry
 class FarPlannerConfig(NativeModuleConfig):
     """Config for the FAR planner native module."""
 
-    cwd: str | None = "."
+    cwd: str | None = "cpp"
     executable: str = "result/bin/far_planner"
     build_command: str | None = "nix build . -o result"
     rebuild_on_change: list[PathEntry] | None = [

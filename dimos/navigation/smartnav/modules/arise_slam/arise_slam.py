@@ -33,7 +33,7 @@ from dimos.utils.change_detect import Glob, PathEntry
 class AriseSLAMConfig(NativeModuleConfig):
     """Config for the AriseSLAM native module."""
 
-    cwd: str | None = "."
+    cwd: str | None = "cpp"
     executable: str = "result/bin/arise_slam"
     build_command: str | None = "nix build . -o result"
     rebuild_on_change: list[PathEntry] | None = [

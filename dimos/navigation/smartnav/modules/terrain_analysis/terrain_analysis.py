@@ -30,7 +30,7 @@ from dimos.utils.change_detect import Glob, PathEntry
 class TerrainAnalysisConfig(NativeModuleConfig):
     """Config for the terrain analysis native module."""
 
-    cwd: str | None = "."
+    cwd: str | None = "cpp"
     executable: str = "result/bin/terrain_analysis"
     build_command: str | None = "nix build . -o result"
     rebuild_on_change: list[PathEntry] | None = [

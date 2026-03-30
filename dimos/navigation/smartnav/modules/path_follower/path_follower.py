@@ -31,7 +31,7 @@ from dimos.utils.change_detect import Glob, PathEntry
 class PathFollowerConfig(NativeModuleConfig):
     """Config for the path follower native module."""
 
-    cwd: str | None = "."
+    cwd: str | None = "cpp"
     executable: str = "result/bin/path_follower"
     build_command: str | None = "nix build . -o result"
     rebuild_on_change: list[PathEntry] | None = [
