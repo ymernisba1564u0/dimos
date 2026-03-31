@@ -119,20 +119,13 @@ class Drawing2D:
         self._elements.append(obs)
 
     def add_observation(self, obs: Observation[Any], **kwargs: Any) -> None:
-        """Smart dispatch: inspect observation data type to pick vis type."""
-        from dimos.msgs.sensor_msgs.Image import Image
-
+        """Smart dispatch: decompose if data is a known vis msg, else store whole."""
+        _DECOMPOSABLE = (PoseStamped, GeoPose, GeoPoint, NavPath, Detection3D)
         data = obs.data
-        if isinstance(data, Image):
-            self._elements.append(
-                Camera(
-                    pose=obs.pose_stamped,
-                    image=data,
-                    **kwargs,
-                )
-            )
+        if isinstance(data, _DECOMPOSABLE):
+            self.add_dimos_msg(data, **kwargs)
         else:
-            self._elements.append(Pose(msg=obs.pose_stamped, **kwargs))
+            self._elements.append(obs)
 
     def base_map(self, grid: OccupancyGrid) -> Drawing2D:
         """Add an OccupancyGrid as the background map."""

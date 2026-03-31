@@ -149,7 +149,7 @@ SceneElement = Union[
     Text,
     "OccupancyGrid",  # pass-through, rendered as base map raster
     "PointCloud2",  # pass-through, rerun renders full 3D, SVG collapses to occupancy grid
-    "EmbeddedObservation",  # pass-through, renderer decides presentation
+    "Observation",  # pass-through, renderer decides presentation (covers EmbeddedObservation)
 ]
 
 

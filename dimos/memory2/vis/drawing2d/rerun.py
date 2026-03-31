@@ -19,14 +19,30 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Any
 
-from dimos.memory2.type.observation import EmbeddedObservation
+from dimos.memory2.type.observation import Observation
 from dimos.memory2.vis.color import hex_to_rgb
 from dimos.memory2.vis.type import Arrow, Box3D, Camera, Point, Polyline, Pose, Text
+from dimos.msgs.geometry_msgs.Quaternion import Quaternion
+from dimos.msgs.geometry_msgs.Transform import Transform
+from dimos.msgs.geometry_msgs.Vector3 import Vector3
 from dimos.msgs.nav_msgs.OccupancyGrid import OccupancyGrid
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 
 if TYPE_CHECKING:
     from dimos.memory2.vis.drawing2d.drawing2d import Drawing2D
+
+# base_link → camera_optical extrinsics (applied at render time for image observations)
+_BASE_TO_OPTICAL = Transform(
+    translation=Vector3(0.3, 0.0, 0.0),
+    rotation=Quaternion(0.0, 0.0, 0.0, 1.0),
+    frame_id="base_link",
+    child_frame_id="camera_link",
+) + Transform(
+    translation=Vector3(0.0, 0.0, 0.0),
+    rotation=Quaternion(-0.5, 0.5, -0.5, 0.5),
+    frame_id="camera_link",
+    child_frame_id="camera_optical",
+)
 
 
 def render(drawing: Drawing2D, app_id: str = "drawing2d", spawn: bool = True) -> None:
@@ -46,11 +62,11 @@ def render(drawing: Drawing2D, app_id: str = "drawing2d", spawn: bool = True) ->
     texts: list[Text] = []
     grids: list[OccupancyGrid] = []
     pointclouds: list[PointCloud2] = []
-    embedded_obs: list[EmbeddedObservation[Any]] = []
+    observations: list[Observation[Any]] = []
 
     for el in drawing.elements:
-        if isinstance(el, EmbeddedObservation):
-            embedded_obs.append(el)
+        if isinstance(el, Observation):
+            observations.append(el)
         elif isinstance(el, Point):
             points.append(el)
         elif isinstance(el, Pose):
@@ -72,7 +88,7 @@ def render(drawing: Drawing2D, app_id: str = "drawing2d", spawn: bool = True) ->
 
     # Build and send blueprint
     has_images = any(c.image is not None for c in cameras) or any(
-        _has_image(obs) for obs in embedded_obs
+        _has_image(obs) for obs in observations
     )
     views: list[Any] = [
         rrb.Spatial3DView(
@@ -201,22 +217,80 @@ def render(drawing: Drawing2D, app_id: str = "drawing2d", spawn: bool = True) ->
         if el.image:
             rr.log(f"{path}/image", el.image.to_rerun(), static=True)
 
-    for i, obs in enumerate(embedded_obs):
+    for i, obs in enumerate(observations):
         path = f"scene/observations/{i}"
-        rr.log(path, obs.pose_stamped.to_rerun(), static=True)
-        if _has_image(obs):
-            img = obs.data
-            h, w = img.shape[:2]
+        data = obs.data
+        if _is_image(data):
+            # Apply base→optical extrinsics for camera frustum rendering
+            world_T_optical = Transform.from_pose("world", obs.pose_stamped) + _BASE_TO_OPTICAL
+            rr.log(path, world_T_optical.to_pose().to_rerun(), static=True)
+            h, w = data.shape[:2]
             focal = max(w, h)
             rr.log(
                 path,
                 rr.Pinhole(focal_length=focal, principal_point=[w / 2, h / 2], resolution=[w, h]),
                 static=True,
             )
-            rr.log(f"{path}/image", img.to_rerun(), static=True)
+            rr.log(f"{path}/image", data.to_rerun(), static=True)
+        elif isinstance(data, PointCloud2):
+            rr.log(path, obs.pose_stamped.to_rerun(), static=True)
+            rr.log(f"{path}/pointcloud", data.to_rerun(), static=True)
+        elif isinstance(data, (int, float)):
+            rr.log(
+                path,
+                rr.Points3D(
+                    positions=[[obs.pose_stamped.x, obs.pose_stamped.y, 0]],
+                    labels=[str(data)],
+                    radii=[0.05],
+                ),
+                static=True,
+            )
+        elif isinstance(data, str):
+            # Word-wrap for label
+            words = data.split()
+            lines, line = [], ""
+            for w in words:
+                if line and len(line) + len(w) + 1 > 40:
+                    lines.append(line)
+                    line = w
+                else:
+                    line = f"{line} {w}" if line else w
+            if line:
+                lines.append(line)
+            label = "\n".join(lines)
+            x, y = obs.pose_stamped.x, obs.pose_stamped.y
+            # Pin: line from ground up, label at the tip
+            rr.log(
+                f"{path}/pin",
+                rr.LineStrips3D(
+                    strips=[[[x, y, 0], [x, y, 5.0]]],
+                    colors=[(100, 100, 100)],
+                    radii=[0.01],
+                ),
+                static=True,
+            )
+            rr.log(
+                f"{path}/label",
+                rr.Points3D(
+                    positions=[[x, y, 5.0]],
+                    labels=[label],
+                    radii=[0.001],
+                ),
+                static=True,
+            )
+        else:
+            rr.log(
+                path,
+                rr.Points3D(positions=[[obs.pose_stamped.x, obs.pose_stamped.y, 0]], radii=[0.05]),
+                static=True,
+            )
 
 
-def _has_image(obs: EmbeddedObservation[Any]) -> bool:
+def _is_image(data: Any) -> bool:
     from dimos.msgs.sensor_msgs.Image import Image
 
-    return isinstance(obs.data, Image)
+    return isinstance(data, Image)
+
+
+def _has_image(obs: Observation[Any]) -> bool:
+    return _is_image(obs.data)

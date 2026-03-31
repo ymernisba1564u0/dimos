@@ -18,12 +18,9 @@ from typing import TypeVar
 from dimos.mapping.occupancy.inflation import simple_inflate
 from dimos.mapping.pointclouds.occupancy import general_occupancy
 from dimos.memory2.store.sqlite import SqliteStore
-from dimos.memory2.transform import normalize, smooth, speed
-from dimos.memory2.vis.color import color
 
 # from dimos.memory2.transform import normalize, smooth, speed
 from dimos.memory2.vis.drawing2d.drawing2d import Drawing2D
-from dimos.memory2.vis.type import Point
 from dimos.models.embedding.clip import CLIPModel
 from dimos.utils.data import get_data
 
@@ -38,18 +35,35 @@ clip = CLIPModel()
 embedded = store.streams.color_image_embedded
 
 drawing = Drawing2D()
-drawing.add(costmap)
+# drawing.add(costmap)
 # drawing.add(global_map)
 
-search_vector = clip.embed_text("bottle")
+search_vector = clip.embed_text("plant")
 
-store.streams.color_image.transform(speed()).transform(smooth(20)).transform(normalize()).tap(
-    lambda obs: drawing.add(Point(obs.pose_stamped, color=color(obs.data, cmap="turbo")))
-).drain()
+# store.streams.color_image.transform(speed()).transform(smooth(20)).transform(normalize()).tap(
+#     lambda obs: drawing.add(Point(obs.pose_stamped, color=color(obs.data, cmap="turbo")))
+# ).drain()
 
-embedded.search(search_vector, k=10).tap(drawing.add).tap(
-    lambda obs: drawing.add(store.streams.lidar.at(obs.ts).first().data)
-)
 
+# # fmt: off
+# embedded.search(search_vector, k=10) \
+#         .tap(drawing.add) \
+#         .tap(lambda obs: drawing.add(store.streams.lidar.at(obs.ts).first().data)).drain()
+# # fmt: on
+
+
+from dimos.models.vl.florence import Florence2Model
+
+florence = Florence2Model()
+florence.start()
+
+
+# fmt: off
+embedded.search(search_vector, k=10) \
+        .tap(drawing.add) \
+        .tap(lambda obs: drawing.add(store.streams.lidar.at(obs.ts).first().data)) \
+        .map(lambda obs: obs.derive(data=florence.caption(obs.data))) \
+        .map(drawing.add).drain()
+# fmt: on
 
 drawing.to_rerun()

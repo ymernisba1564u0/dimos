@@ -168,20 +168,29 @@ class TestDrawingAutoWrap:
 class TestDrawingObservations:
     """Drawing.add() smart dispatch for Observation types."""
 
-    def test_image_observation_becomes_camera(self):
+    def test_image_observation_stored_as_observation(self):
         img = Image(np.zeros((480, 640, 3), dtype=np.uint8))
         obs = Observation(id=1, ts=1.0, pose=(3, 1, 0, 0, 0, 0, 1), _data=img)
 
         d = Drawing()
-        d.add(obs, color="purple")
+        d.add(obs)
         el = d.elements[0]
-        assert isinstance(el, Camera)
-        assert el.pose.x == pytest.approx(3.0)
-        assert el.image is img
-        assert el.color == "purple"
+        assert isinstance(el, Observation)
+        assert el.data is img
 
-    def test_non_image_observation_becomes_pose(self):
+    def test_non_image_observation_stored_as_observation(self):
         obs = Observation(id=2, ts=2.0, pose=(5, 2, 0, 0, 0, 0, 1), _data="some_data")
+
+        d = Drawing()
+        d.add(obs)
+        el = d.elements[0]
+        assert isinstance(el, Observation)
+        assert el.data == "some_data"
+
+    def test_posestamped_observation_decomposed(self):
+        from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped as PS
+
+        obs = Observation(id=3, ts=3.0, pose=(1, 2, 0, 0, 0, 0, 1), _data=PS(5, 2, 0))
 
         d = Drawing()
         d.add(obs)
@@ -189,7 +198,7 @@ class TestDrawingObservations:
         assert isinstance(el, Pose)
         assert el.msg.x == pytest.approx(5.0)
 
-    def test_embedded_observation_becomes_arrow(self):
+    def test_embedded_observation_stored_as_observation(self):
         obs = EmbeddedObservation(
             id=0,
             ts=0.0,
@@ -202,7 +211,7 @@ class TestDrawingObservations:
         d.add(obs)
         assert len(d) == 1
         el = d.elements[0]
-        assert isinstance(el, Arrow)
+        assert isinstance(el, EmbeddedObservation)
 
 
 class TestDrawingConvenience:
