@@ -307,7 +307,7 @@ class RerunBridgeModule(Module[Config]):
                 )
             rr.spawn(connect=True, memory_limit=self.config.memory_limit)
         elif self.config.viewer_mode == "web":
-            server_uri = rr.serve_grpc()
+            server_uri = rr.serve_grpc(grpc_port=RERUN_GRPC_PORT)
             rr.serve_web_viewer(connect_to=server_uri, open_browser=False)
         elif self.config.viewer_mode == "connect":
             rr.connect_grpc(self.config.connect_url)

@@ -47,10 +47,11 @@ import sys
 import time
 from typing import Any, TypedDict
 
-from dimos.memory2.codecs.base import _resolve_payload_type
+import rerun as rr
+
 from dimos.memory2.store.sqlite import SqliteStore
 from dimos.protocol.pubsub.impl.lcmpubsub import LCMPubSubBase, Topic
-from dimos.protocol.pubsub.spec import PubSub
+from dimos.visualization.rerun.bridge import RerunConvertible, is_rerun_multi
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -164,16 +165,20 @@ class RecordReplay:
         logger.info("Recording stopped")
 
     def _on_message(self, msg: bytes, topic: Topic) -> None:
-        """Handle incoming message during recording."""
         stream_name = topic_to_stream_name(topic.pattern)
 
         if self._topic_filter is not None and stream_name not in self._topic_filter:
             return
 
-        msg_type = type(msg)
-
-        s = self._store.stream(stream_name, msg_type)
+        s = self._store.stream(stream_name, type(msg))
         s.append(msg, ts=time.time())
+
+        # Persist the full channel string (with #type) in the registry
+        # so playback can reconstruct the lcm_type for decoding.
+        reg = self._store._registry.get(stream_name)
+        if reg and "channel" not in reg:
+            reg["channel"] = str(topic)
+            self._store._registry.put(stream_name, reg)
 
     @property
     def duration(self) -> float:
@@ -222,34 +227,40 @@ class RecordReplay:
             result.append(info)
         return tuple(result)
 
-    def play(
-        self,
-        pubsub: PubSub[Any, Any] | None = None,
-        speed: float = 1.0,
-    ) -> None:
-        """Start playback in a background thread.
+    def play(self, speed: float = 1.0) -> None:
+        """Start playback as a separate Rerun recording.
 
-        Args:
-            pubsub: If provided, messages are published to this pubsub.
-                    Use LCM() to make them visible to rerun-bridge.
-            speed: Playback speed multiplier (1.0 = realtime, 2.0 = 2x, etc).
+        Connects to the running Rerun viewer and logs decoded messages
+        under a recording called ``"playback"``, so it appears alongside
+        (but separate from) any live data.
         """
         if self.is_playing:
             raise RuntimeError("Already playing")
 
         self._play_speed = speed
-        self._pubsub = pubsub
         # Set resume so playback starts, this is cleared to pause playback.
         self._resume.set()
-        self._play_task = asyncio.create_task(self._playback_loop(pubsub))
+        self._play_task = asyncio.create_task(self._playback_loop())
 
-    async def _playback_loop(self, pubsub: PubSub[Any, Any] | None) -> None:
-        """Main playback loop — merges all streams by timestamp."""
+    async def _playback_loop(self) -> None:
         t_min, t_max = self.time_range
         if t_min >= t_max:
             return
 
-        # Build iterators for each stream, starting from seek position
+        # Separate Rerun recording so playback appears as its own source
+        rec = rr.RecordingStream("playback", make_default=False)
+        rec.connect_grpc()
+
+        # Build topic map for decoding raw bytes -> DimosMsg
+        topic_map: dict[str, Topic] = {}
+        for name in self._store.list_streams():
+            reg = self._store._registry.get(name)
+            if reg:
+                channel = reg.get("channel")
+                if channel:
+                    topic_map[name] = Topic.from_channel_str(channel)
+
+        # Merge-sort all streams by timestamp
         start_ts = t_min + self._position
         heap: list[tuple[float, int, str, Any]] = []
         counter = 0  # tiebreaker for heapq
@@ -267,7 +278,6 @@ class RecordReplay:
         if not heap:
             return
 
-        topic_map = {} if pubsub is None else self._build_topic_map(pubsub)
         wall_start = time.monotonic()
         rec_start = heap[0][0]  # earliest observation timestamp
 
@@ -282,12 +292,22 @@ class RecordReplay:
             # Wait for correct playback time
             elapsed_rec = ts - rec_start
             target_wall = wall_start + (elapsed_rec / self._play_speed)
-            sleep_time = target_wall - time.monotonic()
-            await asyncio.sleep(sleep_time)
+            await asyncio.sleep(target_wall - time.monotonic())
 
             self._position = ts - t_min
-            if pubsub is not None and stream_name in topic_map:
-                pubsub.publish(topic_map[stream_name], obs.data)
+
+            # Decode raw bytes -> DimosMsg -> Rerun archetype
+            topic = topic_map.get(stream_name)
+            if topic is not None and topic.lcm_type is not None:
+                msg = topic.lcm_type.lcm_decode(obs.data)
+                if isinstance(msg, RerunConvertible):
+                    entity_path = f"world/{stream_name}"
+                    rerun_data = msg.to_rerun()
+                    if is_rerun_multi(rerun_data):
+                        for path, archetype in rerun_data:
+                            rec.log(path, archetype)
+                    else:
+                        rec.log(entity_path, rerun_data)
 
             try:
                 next_obs = next(it)
@@ -295,24 +315,6 @@ class RecordReplay:
                 continue
             heapq.heappush(heap, (next_obs.ts, counter, stream_name, (next_obs, it)))
             counter += 1
-
-    def _build_topic_map(self, pubsub: PubSub[Any, Any]) -> dict[str, Topic]:
-        """Build stream_name -> Topic mapping for publishing."""
-        topic_map: dict[str, Topic] = {}
-
-        for name in self._store.list_streams():
-            reg = self._store._registry.get(name)
-            if reg is None:
-                continue
-
-            payload_module = reg.get("payload_module")
-            lcm_type = None
-            if payload_module:
-                lcm_type = _resolve_payload_type(payload_module)
-
-            topic_map[name] = Topic(f"/{name}", lcm_type=lcm_type)
-
-        return topic_map
 
     def pause(self) -> None:
         """Pause playback. Resume with :meth:`resume`."""
