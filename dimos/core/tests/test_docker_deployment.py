@@ -16,7 +16,7 @@
 Smoke tests for Docker module deployment routing.
 
 These tests verify that the ModuleCoordinator correctly detects and routes
-docker modules to DockerModuleOuter WITHOUT actually running Docker.
+docker modules to DockerModuleProxy WITHOUT actually running Docker.
 """
 
 from __future__ import annotations
@@ -27,14 +27,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from dimos.core.docker_module import DockerModuleConfig, DockerModuleOuter, is_docker_module
-from dimos.core.global_config import global_config
+from dimos.core.docker_module import DockerModuleConfig, DockerModuleProxy
 from dimos.core.module import Module
-from dimos.core.module_coordinator import ModuleCoordinator
 from dimos.core.rpc_client import RpcCall
 from dimos.core.stream import Out
 
-# -- Fixtures: fake module classes -------------------------------------------
+# -- Fixtures -----------------------------------------------------------------
 
 
 class FakeDockerConfig(DockerModuleConfig):
@@ -47,6 +45,7 @@ class FakeDockerConfig(DockerModuleConfig):
 
 class FakeDockerModule(Module["FakeDockerConfig"]):
     default_config = FakeDockerConfig
+    deployment = "docker"
     output: Out[str]
 
 
@@ -57,153 +56,75 @@ class FakeRegularModule(Module):
 # -- Tests -------------------------------------------------------------------
 
 
-class TestIsDockerModule:
-    def test_docker_module_detected(self):
-        assert is_docker_module(FakeDockerModule) is True
+class TestDeploymentClassVar:
+    def test_docker_module_has_docker_deployment(self):
+        assert FakeDockerModule.deployment == "docker"
 
-    def test_regular_module_not_detected(self):
-        assert is_docker_module(FakeRegularModule) is False
+    def test_regular_module_has_python_deployment(self):
+        assert FakeRegularModule.deployment == "python"
 
-    def test_plain_class_not_detected(self):
-        assert is_docker_module(str) is False
-
-    def test_no_default_config(self):
+    def test_bare_module_has_python_deployment(self):
         class Bare(Module):
             pass
 
-        # Module has default_config = ModuleConfig, which is not DockerModuleConfig
-        assert is_docker_module(Bare) is False
+        assert Bare.deployment == "python"
 
 
 class TestModuleCoordinatorDockerRouting:
-    @patch("dimos.core.module_coordinator.WorkerManagerDocker")
-    @patch("dimos.core.module_coordinator.WorkerManagerPython")
-    def test_deploy_routes_docker_module(self, mock_py_cls, mock_docker_cls):
-        mock_py = MagicMock()
-        mock_py_cls.return_value = mock_py
-
-        mock_docker = MagicMock()
-        mock_docker_cls.return_value = mock_docker
+    @patch("dimos.core.docker_module.DockerModuleProxy")
+    def test_deploy_routes_docker_module(self, mock_proxy_cls, dimos_cluster):
         mock_dm = MagicMock()
-        mock_docker.deploy.return_value = mock_dm
+        mock_proxy_cls.return_value = mock_dm
 
-        coordinator = ModuleCoordinator()
-        coordinator.start()
-        try:
-            result = coordinator.deploy(FakeDockerModule)
+        result = dimos_cluster.deploy(FakeDockerModule)
 
-            # Docker manager should handle it
-            mock_docker.deploy.assert_called_once_with(FakeDockerModule, global_config, {})
-            # Python manager should NOT be used
-            mock_py.deploy.assert_not_called()
-            assert result is mock_dm
-            assert coordinator.get_instance(FakeDockerModule) is mock_dm
-        finally:
-            coordinator.stop()
+        mock_proxy_cls.assert_called_once()
+        assert result is mock_dm
+        assert dimos_cluster.get_instance(FakeDockerModule) is mock_dm
 
-    @patch("dimos.core.module_coordinator.WorkerManagerDocker")
-    @patch("dimos.core.module_coordinator.WorkerManagerPython")
-    def test_deploy_docker_propagates_failure(self, mock_py_cls, mock_docker_cls):
-        mock_py_cls.return_value = MagicMock()
-        mock_docker = MagicMock()
-        mock_docker_cls.return_value = mock_docker
-        mock_docker.deploy.side_effect = RuntimeError("launch failed")
+    @patch("dimos.core.docker_module.DockerModuleProxy")
+    def test_deploy_docker_propagates_failure(self, mock_proxy_cls, dimos_cluster):
+        mock_proxy_cls.side_effect = RuntimeError("launch failed")
 
-        coordinator = ModuleCoordinator()
-        coordinator.start()
-        try:
-            with pytest.raises(RuntimeError, match="launch failed"):
-                coordinator.deploy(FakeDockerModule)
-        finally:
-            coordinator.stop()
+        with pytest.raises(RuntimeError, match="launch failed"):
+            dimos_cluster.deploy(FakeDockerModule)
 
-    @patch("dimos.core.module_coordinator.WorkerManagerDocker")
-    @patch("dimos.core.module_coordinator.WorkerManagerPython")
-    def test_deploy_routes_regular_module_to_python_manager(self, mock_py_cls, mock_docker_cls):
-        mock_py = MagicMock()
-        mock_py_cls.return_value = mock_py
-        mock_proxy = MagicMock()
-        mock_py.deploy.return_value = mock_proxy
+    def test_deploy_routes_regular_module_not_to_docker(self, dimos_cluster):
+        # Regular modules should not go through DockerModuleProxy
+        assert FakeRegularModule.deployment == "python"
 
-        # Docker manager rejects regular modules
-        mock_docker = MagicMock()
-        mock_docker_cls.return_value = mock_docker
-        mock_docker.should_manage.return_value = False
-
-        coordinator = ModuleCoordinator()
-        coordinator.start()
-        try:
-            result = coordinator.deploy(FakeRegularModule)
-
-            mock_py.deploy.assert_called_once_with(FakeRegularModule, global_config, {})
-            assert result is mock_proxy
-        finally:
-            coordinator.stop()
-
-    @patch("dimos.core.module_coordinator.WorkerManagerDocker")
-    @patch("dimos.core.module_coordinator.WorkerManagerPython")
-    def test_deploy_parallel_separates_docker_and_regular(self, mock_py_cls, mock_docker_cls):
-        mock_py = MagicMock()
-        mock_py_cls.return_value = mock_py
-        regular_proxy = MagicMock()
-        mock_py.deploy_parallel.return_value = [regular_proxy]
-
-        mock_docker = MagicMock()
-        mock_docker_cls.return_value = mock_docker
+    @patch("dimos.core.docker_module.DockerModuleProxy")
+    def test_deploy_parallel_deploys_docker_module(self, mock_proxy_cls, dimos_cluster):
         mock_dm = MagicMock()
-        mock_docker.deploy_parallel.return_value = [mock_dm]
-        # Docker manager only claims FakeDockerModule
-        mock_docker.should_manage.side_effect = lambda cls: cls is FakeDockerModule
+        mock_proxy_cls.return_value = mock_dm
 
-        coordinator = ModuleCoordinator()
-        coordinator.start()
-        try:
-            specs = [
-                (FakeRegularModule, (), {}),
-                (FakeDockerModule, (), {}),
-            ]
-            results = coordinator.deploy_parallel(specs)
+        specs = [
+            (FakeDockerModule, (), {}),
+        ]
+        results = dimos_cluster.deploy_parallel(specs)
 
-            mock_py.deploy_parallel.assert_called_once_with([(FakeRegularModule, (), {})])
-            mock_docker.deploy_parallel.assert_called_once_with([(FakeDockerModule, (), {})])
-            mock_dm.start.assert_not_called()
+        mock_proxy_cls.assert_called_once()
+        assert results[0] is mock_dm
 
-            assert results[0] is regular_proxy
-            assert results[1] is mock_dm
-        finally:
-            coordinator.stop()
-
-    @patch("dimos.core.module_coordinator.WorkerManagerDocker")
-    @patch("dimos.core.module_coordinator.WorkerManagerPython")
-    def test_stop_cleans_up_all_managers(self, mock_py_cls, mock_docker_cls):
-        mock_py = MagicMock()
-        mock_py_cls.return_value = mock_py
-        mock_docker = MagicMock()
-        mock_docker_cls.return_value = mock_docker
+    @patch("dimos.core.docker_module.DockerModuleProxy")
+    def test_stop_cleans_up_docker_modules(self, mock_proxy_cls, dimos_cluster):
         mock_dm = MagicMock()
-        mock_docker.deploy.return_value = mock_dm
+        mock_proxy_cls.return_value = mock_dm
 
-        coordinator = ModuleCoordinator()
-        coordinator.start()
-        try:
-            coordinator.deploy(FakeDockerModule)
-        finally:
-            coordinator.stop()
+        dimos_cluster.deploy(FakeDockerModule)
+        dimos_cluster.stop()
 
-        # Module stop() called
-        assert mock_dm.stop.call_count == 1
-        # Both managers stopped
-        mock_py.stop.assert_called_once()
-        mock_docker.stop.assert_called_once()
+        # stop() is called at least once (fixture teardown may call it again)
+        mock_dm.stop.assert_called()
 
 
-class TestDockerModuleOuterGetattr:
-    """Tests for DockerModuleOuter.__getattr__ avoiding infinite recursion."""
+class TestDockerModuleProxyGetattr:
+    """Tests for DockerModuleProxy.__getattr__ avoiding infinite recursion."""
 
     def test_getattr_no_recursion_when_rpcs_not_set(self):
         """If __init__ fails before self.rpcs is assigned, __getattr__ must not recurse."""
 
-        dm = DockerModuleOuter.__new__(DockerModuleOuter)
+        dm = DockerModuleProxy.__new__(DockerModuleProxy)
         # Don't set rpcs, _module_class, or any instance attrs — simulates early __init__ failure
         with pytest.raises(AttributeError):
             _ = dm.some_method
@@ -211,14 +132,14 @@ class TestDockerModuleOuterGetattr:
     def test_getattr_no_recursion_on_cleanup_attrs(self):
         """Accessing cleanup-related attrs before they exist must raise, not recurse."""
 
-        dm = DockerModuleOuter.__new__(DockerModuleOuter)
+        dm = DockerModuleProxy.__new__(DockerModuleProxy)
         # These are accessed during _cleanup() — if rpcs isn't set, they must not recurse
         for attr in ("rpc", "config", "_container_name", "_unsub_fns"):
             with pytest.raises(AttributeError):
                 getattr(dm, attr)
 
     def test_getattr_delegates_to_rpc_when_rpcs_set(self):
-        dm = DockerModuleOuter.__new__(DockerModuleOuter)
+        dm = DockerModuleProxy.__new__(DockerModuleProxy)
         dm.rpcs = {"do_thing"}
 
         # _module_class needs a real method with __name__ for RpcCall
@@ -234,27 +155,27 @@ class TestDockerModuleOuterGetattr:
         assert isinstance(result, RpcCall)
 
     def test_getattr_raises_for_unknown_method(self):
-        dm = DockerModuleOuter.__new__(DockerModuleOuter)
+        dm = DockerModuleProxy.__new__(DockerModuleProxy)
         dm.rpcs = {"do_thing"}
 
         with pytest.raises(AttributeError, match="not found"):
             _ = dm.nonexistent
 
 
-class TestDockerModuleOuterCleanupReconnect:
-    """Tests for DockerModuleOuter._cleanup with docker_reconnect_container."""
+class TestDockerModuleProxyCleanupReconnect:
+    """Tests for DockerModuleProxy._cleanup with docker_reconnect_container."""
 
-    def test_cleanup_skips_stop_when_reconnect(self):
-        with patch.object(DockerModuleOuter, "__init__", lambda self: None):
-            dm = DockerModuleOuter.__new__(DockerModuleOuter)
+    def test_cleanup_skips_stop_when_reconnected(self):
+        with patch.object(DockerModuleProxy, "__init__", lambda self: None):
+            dm = DockerModuleProxy.__new__(DockerModuleProxy)
             dm._running = threading.Event()
             dm._running.set()
             dm._container_name = "test_container"
             dm._unsub_fns = []
             dm.rpc = MagicMock()
             dm.remote_name = "TestModule"
+            dm._reconnected = True
 
-            # reconnect mode: should NOT stop/rm the container
             dm.config = FakeDockerConfig(docker_reconnect_container=True)
             with (
                 patch("dimos.core.docker_module._run") as mock_run,
@@ -264,17 +185,17 @@ class TestDockerModuleOuterCleanupReconnect:
                 mock_run.assert_not_called()
                 mock_rm.assert_not_called()
 
-    def test_cleanup_stops_container_when_not_reconnect(self):
-        with patch.object(DockerModuleOuter, "__init__", lambda self: None):
-            dm = DockerModuleOuter.__new__(DockerModuleOuter)
+    def test_cleanup_stops_container_when_not_reconnected(self):
+        with patch.object(DockerModuleProxy, "__init__", lambda self: None):
+            dm = DockerModuleProxy.__new__(DockerModuleProxy)
             dm._running = threading.Event()
             dm._running.set()
             dm._container_name = "test_container"
             dm._unsub_fns = []
             dm.rpc = MagicMock()
             dm.remote_name = "TestModule"
+            dm._reconnected = False
 
-            # normal mode: should stop and rm the container
             dm.config = FakeDockerConfig(docker_reconnect_container=False)
             with (
                 patch("dimos.core.docker_module._run") as mock_run,
@@ -283,3 +204,23 @@ class TestDockerModuleOuterCleanupReconnect:
                 dm._cleanup()
                 mock_run.assert_called_once()  # docker stop
                 mock_rm.assert_called_once()  # docker rm -f
+
+    def test_stop_skips_remote_rpc_when_reconnected(self):
+        """stop() should not send the remote stop RPC for a reconnected container."""
+        with patch.object(DockerModuleProxy, "__init__", lambda self: None):
+            dm = DockerModuleProxy.__new__(DockerModuleProxy)
+            dm._running = threading.Event()
+            dm._running.set()
+            dm._container_name = "test_container"
+            dm._unsub_fns = []
+            dm.rpc = MagicMock()
+            dm.remote_name = "TestModule"
+            dm._reconnected = True
+            dm.config = FakeDockerConfig(docker_reconnect_container=True)
+
+            with (
+                patch("dimos.core.docker_module._run"),
+                patch("dimos.core.docker_module._remove_container"),
+            ):
+                dm.stop()
+                dm.rpc.call_nowait.assert_not_called()

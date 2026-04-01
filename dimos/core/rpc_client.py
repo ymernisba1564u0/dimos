@@ -16,7 +16,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
 from dimos.core.stream import RemoteStream
-from dimos.core.worker_python import MethodCallProxy
+from dimos.core.worker import MethodCallProxy
 from dimos.protocol.rpc.pubsubrpc import LCMRPC
 from dimos.protocol.rpc.spec import DEFAULT_RPC_TIMEOUT, DEFAULT_RPC_TIMEOUTS, RPCSpec
 from dimos.utils.logging_config import setup_logger
@@ -78,11 +78,7 @@ class RpcCall:
         return (self._name, self._remote_name)
 
     def __setstate__(self, state) -> None:  # type: ignore[no-untyped-def]
-        # Support both old 2-tuple and new 3-tuple (legacy) state for pickle compat.
-        if len(state) == 3:
-            self._name, self._remote_name, _ = state
-        else:
-            self._name, self._remote_name = state
+        self._name, self._remote_name = state
         self._unsub_fns = []
         self._rpc = None
         self._stop_rpc_client = None
@@ -95,9 +91,6 @@ class ModuleProxyProtocol(Protocol):
     def start(self) -> None: ...
     def stop(self) -> None: ...
     def set_transport(self, stream_name: str, transport: Any) -> bool: ...
-    def get_rpc_method_names(self) -> list[str]: ...
-    def set_rpc_method(self, method: str, callable: RpcCall) -> None: ...
-    def get_rpc_calls(self, *methods: str) -> RpcCall | tuple[RpcCall, ...]: ...
 
 
 class RPCClient:

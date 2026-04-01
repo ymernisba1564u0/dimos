@@ -19,31 +19,24 @@ from typing import TYPE_CHECKING, Any
 from dimos.core.global_config import GlobalConfig
 from dimos.core.module import ModuleBase, ModuleSpec
 from dimos.utils.logging_config import setup_logger
-from dimos.utils.thread_utils import safe_thread_map
-from dimos.utils.typing_utils import ExceptionGroup
+from dimos.utils.safe_thread_map import safe_thread_map
 
 if TYPE_CHECKING:
-    from dimos.core.docker_module import DockerModuleOuter
+    from dimos.core.docker_module import DockerModuleProxy
     from dimos.core.rpc_client import ModuleProxyProtocol
 
 logger = setup_logger()
 
 
 class WorkerManagerDocker:
-    """Manages deployment of Docker-backed modules."""
+    deployment_identifier: str = "docker"
 
     def __init__(self, g: GlobalConfig) -> None:
         self._cfg = g
-        self._deployed: list[DockerModuleOuter] = []
-
-    def should_manage(self, module_class: type) -> bool:
-        # inlined to prevent circular dependency
-        from dimos.core.docker_module import is_docker_module
-
-        return is_docker_module(module_class)
+        self._deployed: list[DockerModuleProxy] = []
 
     def start(self) -> None:
-        """No-op — Docker manager has no persistent workers."""
+        pass
 
     def deploy(
         self,
@@ -52,33 +45,27 @@ class WorkerManagerDocker:
         kwargs: dict[str, Any],
     ) -> ModuleProxyProtocol:
         # inlined to prevent circular dependency
-        from dimos.core.docker_module import DockerModuleOuter
+        from dimos.core.docker_module import DockerModuleProxy
 
-        mod = DockerModuleOuter(module_class, g=global_config, **kwargs)  # type: ignore[arg-type]
-        mod.build()
+        mod = DockerModuleProxy(module_class, g=global_config, **kwargs)
         self._deployed.append(mod)
         return mod
 
     def deploy_parallel(self, specs: list[ModuleSpec]) -> list[ModuleProxyProtocol]:
         # inlined to prevent circular dependency
-        from dimos.core.docker_module import DockerModuleOuter
+        from dimos.core.docker_module import DockerModuleProxy
 
-        def _on_errors(
-            _outcomes: list[Any], successes: list[DockerModuleOuter], errors: list[Exception]
-        ) -> None:
-            for mod in successes:
-                with suppress(Exception):
-                    mod.stop()
-            raise ExceptionGroup("docker deploy_parallel failed", errors)
-
-        def _deploy_one(spec: ModuleSpec) -> DockerModuleOuter:
-            mod = DockerModuleOuter(spec[0], g=spec[1], **spec[2])  # type: ignore[arg-type]
-            mod.build()
+        def _deploy(spec: ModuleSpec) -> DockerModuleProxy:
+            # spec = (module_class, global_config, kwargs)
+            mod = DockerModuleProxy(spec[0], g=spec[1], **spec[2])
+            self._deployed.append(mod)
             return mod
 
-        results = safe_thread_map(specs, _deploy_one, _on_errors)
-        self._deployed.extend(results)
-        return results  # type: ignore[return-value]
+        try:
+            return safe_thread_map(specs, _deploy)
+        except:
+            self.stop()
+            raise
 
     def stop(self) -> None:
         for mod in reversed(self._deployed):
@@ -87,8 +74,15 @@ class WorkerManagerDocker:
         self._deployed.clear()
 
     def health_check(self) -> bool:
-        # TODO: in the future decide on what a meaninful health check would be
+        for mod in self._deployed:
+            if not mod.is_running():
+                logger.error(
+                    "Docker container not running",
+                    module=getattr(mod, "_module_name", "unknown"),
+                )
+                return False
         return True
 
     def suppress_console(self) -> None:
-        """No-op — Docker containers manage their own stdio."""
+        # already suppressed by default
+        pass
