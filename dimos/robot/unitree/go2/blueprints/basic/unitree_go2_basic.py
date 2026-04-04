@@ -20,8 +20,11 @@ from typing import Any
 from dimos.constants import DEFAULT_CAPACITY_COLOR_IMAGE
 from dimos.core.blueprints import autoconnect
 from dimos.core.global_config import global_config
+from dimos.core.module import In
 from dimos.core.transport import pSHMTransport
+from dimos.memory2.module import Recorder
 from dimos.msgs.sensor_msgs.Image import Image
+from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM
 from dimos.protocol.service.system_configurator.clock_sync import ClockSyncConfigurator
 from dimos.robot.unitree.go2.connection import GO2Connection
@@ -132,9 +135,16 @@ elif global_config.viewer.startswith("rerun"):
 else:
     with_vis = _transports_base
 
+
+class Go2Recorder(Recorder):
+    color_image: In[Image]
+    lidar: In[PointCloud2]
+
+
 unitree_go2_basic = (
     autoconnect(
         with_vis,
+        Go2Recorder.blueprint(db_path="go2_recording.db"),
         GO2Connection.blueprint(),
         WebsocketVisModule.blueprint(),
     )

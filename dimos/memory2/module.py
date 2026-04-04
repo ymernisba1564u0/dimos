@@ -15,12 +15,21 @@
 from __future__ import annotations
 
 import inspect
+import logging
+import os
+from pathlib import Path
 from typing import Any
 
+from pydantic import field_validator
+from reactivex.disposable import Disposable
+
 from dimos.core.core import rpc
-from dimos.core.module import Module, ModuleConfigT
+from dimos.core.module import Module, ModuleConfig, ModuleConfigT
 from dimos.memory2.store.null import NullStore
+from dimos.memory2.store.sqlite import SqliteStore
 from dimos.memory2.stream import Stream
+
+logger = logging.getLogger(__name__)
 
 
 class StreamModule(Module[ModuleConfigT]):
@@ -104,6 +113,72 @@ class StreamModule(Module[ModuleConfigT]):
         if isinstance(pipeline, Stream):
             return stream.chain(pipeline)
         return stream.transform(pipeline)
+
+    @rpc
+    def stop(self) -> None:
+        super().stop()
+
+
+class RecorderConfig(ModuleConfig):
+    """Config for the Recorder module."""
+
+    db_path: str | Path = "recording.db"
+    overwrite: bool = True
+
+    @field_validator("db_path", mode="before")
+    @classmethod
+    def _resolve_path(cls, v: str | Path) -> Path:
+        p = Path(os.fspath(v))
+        if not p.is_absolute():
+            from dimos.utils.data import get_project_root
+
+            p = get_project_root() / p
+        return p
+
+
+class Recorder(Module[RecorderConfig]):
+    """Records all ``In`` ports to a memory2 SQLite database.
+
+    Subclass with the topics you want to record::
+
+        class MyRecorder(Recorder):
+            color_image: In[Image]
+            lidar: In[PointCloud2]
+
+        blueprint.add(MyRecorder, db_path="session.db")
+    """
+
+    default_config = RecorderConfig
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._store: SqliteStore | None = None
+
+    @rpc
+    def start(self) -> None:
+        super().start()
+
+        db_path = Path(self.config.db_path)
+        if db_path.exists():
+            if self.config.overwrite:
+                db_path.unlink()
+                logger.info("Deleted existing recording %s", db_path)
+            else:
+                raise FileExistsError(f"Recording already exists: {db_path}")
+
+        self._store = self.register_disposable(SqliteStore(path=str(db_path)))
+        self._store.start()
+
+        if not self.inputs:
+            logger.warning("Recorder has no In ports — nothing to record, subclass the Recorder")
+            return
+
+        for name, port in self.inputs.items():
+            stream: Stream[Any] = self._store.stream(name, port.type)
+            self.register_disposable(
+                Disposable(port.subscribe(lambda msg, s=stream: s.append(msg)))
+            )
+            logger.info("Recording %s (%s)", name, port.type.__name__)
 
     @rpc
     def stop(self) -> None:

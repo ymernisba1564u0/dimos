@@ -30,6 +30,6 @@ unitree_go2 = autoconnect(
     ReplanningAStarPlanner.blueprint(),
     WavefrontFrontierExplorer.blueprint(),
     PatrollingModule.blueprint(),
-).global_config(n_workers=7, robot_model="unitree_go2")
+).global_config(n_workers=9, robot_model="unitree_go2")
 
 __all__ = ["unitree_go2"]

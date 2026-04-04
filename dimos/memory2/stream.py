@@ -469,4 +469,3 @@ class Stream(CompositeResource, Generic[T]):
         else:
             obs = Observation(id=-1, ts=_ts, pose=pose, tags=_tags, _data=payload)
         return self._source.append(obs)
-        return self._source.append(obs)
