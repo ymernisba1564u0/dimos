@@ -171,20 +171,23 @@ _smart_nav = autoconnect(
 # ---------------------------------------------------------------------------
 _smart_nav_sim = autoconnect(
     TerrainAnalysis.blueprint(
-        obstacle_height_threshold=0.2,
+        obstacle_height_threshold=0.1,  # lower threshold catches furniture (couches ~0.15m above ground estimate)
+        ground_height_threshold=0.05,  # ground cost threshold for gentle avoidance
         max_relative_z=0.3,
+        min_relative_z=-1.5,  # include all points below robot (floor + furniture)
     ),
     TerrainMapExt.blueprint(),
     LocalPlanner.blueprint(
         autonomy_mode=True,
         max_speed=2.0,
         autonomy_speed=2.0,
-        obstacle_height_threshold=0.2,
-        # Match original VectorRobotics params: only consider obstacles in a
-        # narrow height band around the robot.  With maxRelZ=1.5 the planner
-        # sees walls from floor to ceiling and treats doorways as impassable.
+        obstacle_height_threshold=0.1,  # match terrain analysis threshold
+        # Height band for direct scan fallback (unused when useTerrainAnalysis=true,
+        # but kept for consistency).  With maxRelZ=1.5 the planner sees walls
+        # from floor to ceiling and treats doorways as impassable; 0.3 is
+        # narrow enough to ignore ceiling/high walls while still seeing furniture.
         max_relative_z=0.3,
-        min_relative_z=-0.4,
+        min_relative_z=-1.5,  # wide band: include floor + furniture below robot
         # Disable freeze logic — robot turns to face goal then drives forward.
         freeze_ang=180.0,
         # Disable backward driving — robot must turn to face goal first.
