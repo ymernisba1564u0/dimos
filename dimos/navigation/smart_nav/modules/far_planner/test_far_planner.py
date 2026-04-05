@@ -89,12 +89,12 @@ class TestPathResolution:
         finally:
             m.stop()
 
-    def test_cwd_resolves_to_smart_nav_root(self):
-        """cwd should resolve to the smart_nav root (where CMakeLists.txt lives)."""
+    def test_cwd_resolves_to_repo_root(self):
+        """cwd should resolve to the vendored ./repo dir (where CMakeLists.txt lives)."""
         m = self._make()
         try:
             cwd = Path(m.config.cwd).resolve()
-            assert (cwd / "CMakeLists.txt").exists(), f"cwd {cwd} is not the smart_nav root"
+            assert (cwd / "CMakeLists.txt").exists(), f"cwd {cwd} is not the repo root"
             assert (cwd / "flake.nix").exists()
         finally:
             m.stop()

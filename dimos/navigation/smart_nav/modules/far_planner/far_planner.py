@@ -34,7 +34,8 @@ from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 class FarPlannerConfig(NativeModuleConfig):
     """Config for the FAR planner native module."""
 
-    cwd: str | None = str(Path(__file__).resolve().parent)
+    # Build from the vendored local source in ./repo so we can patch the C++.
+    cwd: str | None = str(Path(__file__).resolve().parent / "repo")
     executable: str = "result/bin/far_planner"
     build_command: str | None = (
         "nix build github:dimensionalOS/dimos-module-far-planner/v0.2.0 --no-write-lock-file"

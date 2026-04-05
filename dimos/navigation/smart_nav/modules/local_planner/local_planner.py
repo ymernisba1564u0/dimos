@@ -20,6 +20,7 @@ evaluation to select collision-free paths toward goals.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from dimos.core.native_module import NativeModule, NativeModuleConfig
@@ -27,7 +28,7 @@ from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs.PointStamped import PointStamped
 from dimos.msgs.geometry_msgs.Twist import Twist
 from dimos.msgs.nav_msgs.Odometry import Odometry
-from dimos.msgs.nav_msgs.Path import Path
+from dimos.msgs.nav_msgs.Path import Path as NavPath
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.utils.data import get_data
 
@@ -43,7 +44,8 @@ class LocalPlannerConfig(NativeModuleConfig):
     Fields with ``None`` default are omitted from the CLI.
     """
 
-    cwd: str | None = "."
+    # Build from the vendored local source in ./repo so we can patch the C++.
+    cwd: str | None = str(Path(__file__).resolve().parent / "repo")
     executable: str = "result/bin/local_planner"
     build_command: str | None = (
         "nix build github:dimensionalOS/dimos-module-local-planner/v0.1.1 --no-write-lock-file"
@@ -135,7 +137,7 @@ class LocalPlanner(NativeModule):
             (intensity = obstacle height). Used when useTerrainAnalysis is enabled.
         joy_cmd (In[Twist]): Joystick/teleop velocity commands.
         way_point (In[PointStamped]): Navigation goal waypoint.
-        path (Out[Path]): Selected local path for path follower.
+        path (Out[NavPath]): Selected local path for path follower.
     """
 
     default_config: type[LocalPlannerConfig] = LocalPlannerConfig  # type: ignore[assignment]
@@ -145,4 +147,4 @@ class LocalPlanner(NativeModule):
     terrain_map: In[PointCloud2]
     joy_cmd: In[Twist]
     way_point: In[PointStamped]
-    path: Out[Path]
+    path: Out[NavPath]

@@ -20,11 +20,13 @@ with PID yaw control, outputting velocity commands.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from dimos.core.native_module import NativeModule, NativeModuleConfig
 from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs.Twist import Twist
 from dimos.msgs.nav_msgs.Odometry import Odometry
-from dimos.msgs.nav_msgs.Path import Path
+from dimos.msgs.nav_msgs.Path import Path as NavPath
 
 
 class PathFollowerConfig(NativeModuleConfig):
@@ -33,7 +35,8 @@ class PathFollowerConfig(NativeModuleConfig):
     Fields with ``None`` default are omitted from the CLI.
     """
 
-    cwd: str | None = "."
+    # Build from the vendored local source in ./repo so we can patch the C++.
+    cwd: str | None = str(Path(__file__).resolve().parent / "repo")
     executable: str = "result/bin/path_follower"
     build_command: str | None = (
         "nix build github:dimensionalOS/dimos-module-path-follower/v0.1.0 --no-write-lock-file"
@@ -109,13 +112,13 @@ class PathFollower(NativeModule):
     then computes velocity commands to follow the path.
 
     Ports:
-        path (In[Path]): Local path to follow.
+        path (In[NavPath]): Local path to follow.
         odometry (In[Odometry]): Vehicle state estimation.
         cmd_vel (Out[Twist]): Velocity commands for the vehicle.
     """
 
     default_config: type[PathFollowerConfig] = PathFollowerConfig  # type: ignore[assignment]
 
-    path: In[Path]
+    path: In[NavPath]
     odometry: In[Odometry]
     cmd_vel: Out[Twist]
