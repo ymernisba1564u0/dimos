@@ -38,6 +38,7 @@ logger = setup_logger()
 
 class CmdVelMuxConfig(ModuleConfig):
     teleop_cooldown_sec: float = 1.0
+    teleop_linear_scale: float = 1.0
 
 
 class CmdVelMux(Module[CmdVelMuxConfig]):
@@ -114,6 +115,12 @@ class CmdVelMux(Module[CmdVelMuxConfig]):
             self.stop_movement.publish(Bool(data=True))
             logger.info("Teleop active — published stop_movement")
 
+        s = self.config.teleop_linear_scale
+        if s != 1.0:
+            msg = Twist(
+                linear=[msg.linear.x * s, msg.linear.y * s, msg.linear.z],
+                angular=[msg.angular.x, msg.angular.y, msg.angular.z],
+            )
         self.cmd_vel.publish(msg)
 
     def _end_teleop(self) -> None:

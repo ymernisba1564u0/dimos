@@ -57,6 +57,7 @@ unitree_g1_nav_sim = (
         ),
         SensorScanGeneration.blueprint(),
         smart_nav(
+            cmd_vel_mux={"teleop_linear_scale": 3.0},
             terrain_analysis={
                 "obstacle_height_threshold": 0.1,
                 "ground_height_threshold": 0.05,
