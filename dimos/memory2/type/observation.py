@@ -104,6 +104,24 @@ class Observation(Generic[T]):
             _data=data,
         )
 
+    def tag(self, **tags: Any) -> Observation[T]:
+        """Return a new observation with tags merged in.
+
+        Kwargs become tag keys; they merge with the existing tags, overriding
+        on collision. The new observation delegates data access back to this
+        one via a lambda loader, so no blob fetch is triggered here — both
+        observations will resolve to the same underlying value on first access.
+        """
+        return Observation(
+            id=self.id,
+            ts=self.ts,
+            data_type=self.data_type,
+            pose=self.pose,
+            tags={**self.tags, **tags},
+            _data=_UNLOADED,
+            _loader=lambda: self.data,
+        )
+
 
 @dataclass
 class EmbeddedObservation(Observation[T]):
@@ -123,4 +141,18 @@ class EmbeddedObservation(Observation[T]):
             _data=data,
             embedding=overrides.get("embedding", self.embedding),
             similarity=overrides.get("similarity", self.similarity),
+        )
+
+    def tag(self, **tags: Any) -> EmbeddedObservation[T]:
+        """Like :meth:`Observation.tag` but preserves embedding and similarity."""
+        return EmbeddedObservation(
+            id=self.id,
+            ts=self.ts,
+            data_type=self.data_type,
+            pose=self.pose,
+            tags={**self.tags, **tags},
+            _data=_UNLOADED,
+            _loader=lambda: self.data,
+            embedding=self.embedding,
+            similarity=self.similarity,
         )

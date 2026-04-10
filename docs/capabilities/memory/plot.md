@@ -27,6 +27,9 @@ color_check.to_svg("assets/plot_colors.svg")
 ```
 
 
+
+
+
 ![output](assets/plot_colors.svg)
 
 named colors can also be used explicitly. when you pin a series to one of
@@ -48,7 +51,6 @@ p.add(Series(ts=xs, values=[math.sin(2 * x) for x in xs]))
 p.add(HLine(y=0, style=Style.dashed, opacity=0.5, color="#ff0000"))
 p.to_svg("assets/plot_named.svg")
 ```
-
 
 ![output](assets/plot_named.svg)
 
@@ -90,7 +92,6 @@ plot.add(
 
 plot.to_svg("assets/plot_robot_data.svg")
 ```
-
 
 ![output](assets/plot_robot_data.svg)
 
@@ -176,8 +177,10 @@ plot.to_svg("assets/plot_plantness_brightness.svg")
 ```
 
 
-![output](assets/plot_plantness_brightness.svg)
 
+
+
+![output](assets/plot_plantness_brightness.svg)
 We see that stuff isn't embedded below some minimum brightness.
 
 Let's now fill the gaps in our semantic graph a bit, looks super ugly above, we will tell plotter to consider unmapped values as zero and connect values that are within 7.5 seconds
@@ -198,6 +201,7 @@ plot.to_svg("assets/plot_plantness_gap_fill.svg")
 
 ```
 
+
 ![output](assets/plot_plantness_gap_fill.svg)
 
 Looks better, these are some very obvious peaks, I'm curious let's see what was captured then.
@@ -215,9 +219,13 @@ for p in peaks:
 
 plot.to_svg("assets/plot_plantness_autopeaks.svg")
 
+from dimos.models.vl.moondream import MoondreamVlModel
+moondream = MoondreamVlModel()
+moondream.start()
+
 # peaks is still a stream of image observations (with prominence and semantic similarity metadata)
 # so we can just draw it directly via mosaic that takes image streams
-m = mosaic(peaks)
+m = mosaic(peaks.map_data(lambda obs: moondream.query_detections(obs.data, "plant")))
 
 m.data.save("assets/plants_auto.png")
 ```
@@ -230,3 +238,5 @@ t= 240.4s score=0.243 prominence=0.047
 
 ![output](assets/plot_plantness_autopeaks.svg)
 ![output](assets/plants_auto.png)
+
+VLM didn't detect second image, should we have some brightness normalizer in the pipeline?

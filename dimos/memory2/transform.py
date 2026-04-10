@@ -218,11 +218,7 @@ def peaks(
         proms = props["prominences"]
 
         for i, prom in zip(idx, proms, strict=True):
-            obs = items[int(i)]
-            yield obs.derive(
-                data=obs.data,
-                tags={**obs.tags, "peak_prominence": float(prom)},
-            )
+            yield items[int(i)].tag(peak_prominence=float(prom))
 
     return FnIterTransformer(_peaks)
 
