@@ -50,7 +50,9 @@ def render(space: Space, app_id: str = "space", spawn: bool = True) -> None:
     import rerun as rr
     import rerun.blueprint as rrb
 
-    rr.init(app_id, spawn=spawn)
+    from dimos.visualization.rerun.init import rerun_init
+
+    rerun_init(app_id, spawn=spawn)
 
     # Collect elements by type
     points: list[Point] = []

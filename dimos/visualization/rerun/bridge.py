@@ -41,11 +41,11 @@ import typer
 
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
-from dimos.msgs.sensor_msgs.PointCloud2 import register_colormap_annotation
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM
 from dimos.protocol.pubsub.patterns import Glob, pattern_matches
 from dimos.protocol.pubsub.spec import SubscribeAllCapable
 from dimos.utils.logging_config import setup_logger
+from dimos.visualization.rerun.init import rerun_init
 
 RERUN_GRPC_PORT = 9876
 RERUN_WEB_PORT = 9090
@@ -301,7 +301,7 @@ class RerunBridgeModule(Module):
         }
 
         # Initialize and spawn Rerun viewer
-        rr.init("dimos")
+        rerun_init("dimos")
 
         if self.config.viewer_mode == "native":
             try:
@@ -329,9 +329,6 @@ class RerunBridgeModule(Module):
 
         if self.config.blueprint:
             rr.send_blueprint(_with_graph_tab(self.config.blueprint()))
-
-        # Register colormap for viewer-side color resolution (PointCloud2 class_ids)
-        register_colormap_annotation("turbo")
 
         # Start pubsubs and subscribe to all messages
         for pubsub in self.config.pubsubs:
