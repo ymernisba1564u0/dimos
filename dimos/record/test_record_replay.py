@@ -23,7 +23,7 @@ from typing import Any
 
 import pytest
 
-from dimos.record import RecordReplay
+from dimos.record.record_replay import RecordReplay
 
 
 class FakeTopic:
