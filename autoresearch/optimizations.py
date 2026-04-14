@@ -177,6 +177,16 @@ ENABLE_SKIP_SENSOR_PUBLISH = True
 ENABLE_SKIP_ROBOT_INIT = True
 
 
+# ------------------------------------------------------------------
+# KNOB 14: Replay speed multiplier
+# ------------------------------------------------------------------
+# Replay is time-paced (emits at recorded timestamps). Higher speed = shorter
+# wall time = less idle polling overhead. Fixed work still processed fully.
+# Controlled via env var DIMOS_REPLAY_SPEED=<float>.
+ENABLE_REPLAY_SPEED = True
+REPLAY_SPEED = 10.0
+
+
 def _build_startup_code() -> str:
     """Assemble the monkey-patch string injected via sitecustomize.py."""
     lines: list[str] = []
@@ -236,6 +246,9 @@ def apply() -> dict:
 
     if ENABLE_SKIP_ROBOT_INIT:
         env["DIMOS_SKIP_ROBOT_INIT"] = "1"
+
+    if ENABLE_REPLAY_SPEED:
+        env["DIMOS_REPLAY_SPEED"] = str(REPLAY_SPEED)
 
     startup_code = _build_startup_code()
     if startup_code:

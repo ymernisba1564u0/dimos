@@ -122,11 +122,14 @@ class ReplayConnection(UnitreeWebRTCConnection):
         get_data(self.dir_name)
         # When exit_on_eof is set, replay streams run once and complete at EOF
         # so the coordinator can be signalled to shut down for fixed-work benches.
+        import os as _os
         default_loop = not exit_on_eof
+        _speed_env = _os.environ.get("DIMOS_REPLAY_SPEED")
         self.replay_config = {
             "loop": kwargs.get("loop", default_loop),
             "seek": kwargs.get("seek"),
             "duration": kwargs.get("duration"),
+            "speed": float(_speed_env) if _speed_env else kwargs.get("speed", 1.0),
         }
         logging.getLogger(__name__).info(
             "ReplayConnection init: dataset=%s exit_on_eof=%s loop=%s",
