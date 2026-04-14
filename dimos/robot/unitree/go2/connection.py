@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import logging
 import sys
 from threading import Thread
@@ -25,7 +27,6 @@ from reactivex.observable import Observable
 
 from dimos.agents.annotation import skill
 from dimos.constants import DEFAULT_THREAD_JOIN_TIMEOUT
-from dimos.core.coordination.module_coordinator import ModuleCoordinator
 from dimos.core.core import rpc
 from dimos.core.global_config import GlobalConfig
 from dimos.core.module import Module, ModuleConfig
@@ -34,6 +35,7 @@ from dimos.core.transport import LCMTransport, pSHMTransport
 from dimos.spec.perception import Camera, Pointcloud
 
 if TYPE_CHECKING:
+    from dimos.core.coordination.module_coordinator import ModuleCoordinator
     from dimos.core.rpc_client import ModuleProxy
 from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.geometry_msgs.Quaternion import Quaternion
