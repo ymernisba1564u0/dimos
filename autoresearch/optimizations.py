@@ -75,7 +75,7 @@ RPC_POOL_MAX_WORKERS = 50  # upstream default
 #   "default": 1 Hz (upstream behavior)
 #   "slow":    0.1 Hz (every 10s)
 #   "once":    publish once on start, then exit thread
-CAMERA_INFO_MODE = "once"  # "default" | "slow" | "once"
+CAMERA_INFO_MODE = "once"  # "default" | "slow" | "once" | "skip"
 
 
 # ------------------------------------------------------------------
@@ -126,7 +126,7 @@ ENABLE_SKIP_WEBSOCKET_VIS = True
 # ClockSyncConfigurator runs NTP-like sync at coordinator build time.
 # During replay there's no real robot clock to sync with — pure waste.
 # Controlled via env var DIMOS_SKIP_CLOCK_SYNC=1 → checked in blueprint.
-ENABLE_SKIP_CLOCK_SYNC = False
+ENABLE_SKIP_CLOCK_SYNC = True
 
 
 # ------------------------------------------------------------------

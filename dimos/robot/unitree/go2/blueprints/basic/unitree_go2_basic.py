@@ -24,8 +24,10 @@ from dimos.core.global_config import global_config
 from dimos.core.transport import pSHMTransport
 from dimos.msgs.sensor_msgs.Image import Image
 from dimos.protocol.pubsub.impl.lcmpubsub import LCM
-from dimos.protocol.service.system_configurator.clock_sync import ClockSyncConfigurator
 from dimos.robot.unitree.go2.connection import GO2Connection
+
+if os.environ.get("DIMOS_SKIP_CLOCK_SYNC") != "1":
+    from dimos.protocol.service.system_configurator.clock_sync import ClockSyncConfigurator
 
 if os.environ.get("DIMOS_SKIP_WEBSOCKET_VIS") != "1":
     from dimos.web.websocket_vis.websocket_vis_module import WebsocketVisModule
