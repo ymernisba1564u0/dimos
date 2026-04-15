@@ -37,8 +37,8 @@ from dimos.utils.logging_config import setup_logger
 logger = setup_logger()
 
 
-class _ChoiceToCmdVel(Module["ModuleConfig"]):
-    default_config = ModuleConfig
+class _ChoiceToCmdVel(Module):
+    config: ModuleConfig
     command_duration: float = 1.0
 
     chat_vote_choice: In[TwitchChoice]

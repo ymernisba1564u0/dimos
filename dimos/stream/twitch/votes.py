@@ -137,8 +137,7 @@ class TwitchVotes(TwitchChat):
     ``chat_vote_choice``.
     """
 
-    default_config = TwitchVotesConfig
-    config: TwitchVotesConfig  # type narrowing for mypy
+    config: TwitchVotesConfig
 
     chat_vote_choice: Out[TwitchChoice]
 

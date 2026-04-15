@@ -79,14 +79,14 @@ class TwitchChatConfig(ModuleConfig):
     filter_author: Callable[[str], bool] | None = None
 
 
-class TwitchChat(Module["TwitchChatConfig"]):
+class TwitchChat(Module):
     """Connects to a Twitch channel and publishes chat messages.
 
     - ``raw_messages`` — every chat message
     - ``filtered_messages`` — messages matching configured regex patterns
     """
 
-    default_config = TwitchChatConfig
+    config: TwitchChatConfig
 
     raw_messages: Out[TwitchMessage]
     filtered_messages: Out[TwitchMessage]
