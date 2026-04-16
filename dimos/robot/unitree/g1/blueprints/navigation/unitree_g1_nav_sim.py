@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""G1 nav sim — FAR planner + PGO loop closure + local obstacle avoidance.
+"""G1 nav sim — SimplePlanner + PGO loop closure + local obstacle avoidance.
 
 Full navigation stack with:
-- FAR visibility-graph global route planner
+- SimplePlanner grid-based A* global route planner
 - PGO pose graph optimization with loop closure detection (GTSAM iSAM2)
 - Local planner for reactive obstacle avoidance
 - Path follower for velocity control
@@ -24,12 +24,12 @@ Full navigation stack with:
 Odometry routing (per CMU ICRA 2022 Fig. 11):
 - Local path modules (LocalPlanner, PathFollower, SensorScanGen):
   use raw odometry — they follow paths in the local odometry frame.
-- Global/terrain modules (FarPlanner, ClickToGoal, TerrainAnalysis):
+- Global/terrain modules (SimplePlanner, ClickToGoal, TerrainAnalysis):
   use PGO corrected_odometry — they need globally consistent positions
-  for terrain classification, visibility graphs, and goal coordinates.
+  for terrain classification, costmap building, and goal coordinates.
 
 Data flow:
-    Click → ClickToGoal (corrected_odom) → goal → FarPlanner (corrected_odom)
+    Click → ClickToGoal (corrected_odom) → goal → SimplePlanner (corrected_odom)
     → way_point → LocalPlanner (raw odom) → path → PathFollower (raw odom)
     → nav_cmd_vel → CmdVelMux → cmd_vel → UnityBridgeModule
 
@@ -76,11 +76,6 @@ unitree_g1_nav_sim = (
                 "slow_down_distance_threshold": 0.5,
                 "omni_dir_goal_threshold": 0.5,
                 "two_way_drive": False,
-            },
-            far_planner={
-                "sensor_range": 15.0,
-                "is_static_env": True,
-                "converge_dist": 1.5,
             },
         ),
         vis_module(

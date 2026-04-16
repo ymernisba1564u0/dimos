@@ -28,6 +28,9 @@ from dimos.core.module import Module, ModuleConfig
 from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs.PointStamped import PointStamped
 from dimos.msgs.nav_msgs.Odometry import Odometry
+from dimos.utils.logging_config import setup_logger
+
+logger = setup_logger()
 
 
 class ClickToGoal(Module):
@@ -85,15 +88,13 @@ class ClickToGoal(Module):
     def _on_click(self, msg: PointStamped) -> None:
         # Reject invalid clicks (sky/background gives inf or huge coords)
         if not all(math.isfinite(v) for v in (msg.x, msg.y, msg.z)):
-            print(f"[click_to_goal] Ignored invalid click: ({msg.x:.1f}, {msg.y:.1f}, {msg.z:.1f})")
+            logger.warning("Ignored invalid click", x=msg.x, y=msg.y, z=msg.z)
             return
         if abs(msg.x) > 500 or abs(msg.y) > 500 or abs(msg.z) > 50:
-            print(
-                f"[click_to_goal] Ignored out-of-range click: ({msg.x:.1f}, {msg.y:.1f}, {msg.z:.1f})"
-            )
+            logger.warning("Ignored out-of-range click", x=msg.x, y=msg.y, z=msg.z)
             return
 
-        print(f"[click_to_goal] Goal: ({msg.x:.1f}, {msg.y:.1f}, {msg.z:.1f})")
+        logger.info("Goal", x=round(msg.x, 1), y=round(msg.y, 1), z=round(msg.z, 1))
         self.way_point.publish(msg)
         self.goal.publish(msg)
 

@@ -126,15 +126,13 @@ class CmdVelMux(Module):
 
     def _on_teleop(self, msg: Twist) -> None:
         was_active: bool
+        old_timer: threading.Timer | None = None
         with self._lock:
             was_active = self._teleop_active
             self._teleop_active = True
             if self._timer is not None:
-                # Cancel + join so the superseded Timer thread exits promptly
-                # rather than accumulating under rapid teleop (50 Hz) and
-                # tripping pytest's thread-leak detector.
                 self._timer.cancel()
-                self._timer.join(timeout=DEFAULT_THREAD_JOIN_TIMEOUT)
+                old_timer = self._timer
             self._timer_gen += 1
             my_gen = self._timer_gen
             # weakref prevents the Timer thread from keeping the mux alive
@@ -150,6 +148,11 @@ class CmdVelMux(Module):
             self._timer = threading.Timer(self.config.tele_cooldown_sec, _end)
             self._timer.daemon = True
             self._timer.start()
+
+        # Join outside the lock to avoid deadlock with _end_teleop's lock acquire.
+        # The generation counter ensures stale callbacks are no-ops.
+        if old_timer is not None:
+            old_timer.join(timeout=DEFAULT_THREAD_JOIN_TIMEOUT)
 
         if not was_active:
             self.stop_movement.publish(Bool(data=True))

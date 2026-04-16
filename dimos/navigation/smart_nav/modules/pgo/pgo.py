@@ -29,6 +29,7 @@ from typing import Any
 import gtsam  # type: ignore[import-untyped]
 import numpy as np
 from scipy.spatial import KDTree
+from scipy.spatial.transform import Rotation
 
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
@@ -165,8 +166,6 @@ class _SimplePGO:
         last = self._key_poses[-1]
         delta_trans = np.linalg.norm(t - last.t_local)
         # Angular distance via quaternion dot product
-        from scipy.spatial.transform import Rotation
-
         q_cur = Rotation.from_matrix(r).as_quat()  # [x,y,z,w]
         q_last = Rotation.from_matrix(last.r_local).as_quat()
         dot = abs(np.dot(q_cur, q_last))
@@ -292,7 +291,12 @@ class _SimplePGO:
             }
         )
         self._history_pairs.append((loop_idx, cur_idx))
-        print(f"[PGO] Loop closure detected: {loop_idx} <-> {cur_idx} (score={fitness:.4f})")
+        logger.info(
+            "Loop closure detected",
+            source=cur_idx,
+            target=loop_idx,
+            score=round(fitness, 4),
+        )
 
     def smooth_and_update(self) -> None:
         has_loop = bool(self._cache_pairs)
@@ -368,9 +372,13 @@ class PGO(Module):
     corrected_odometry: Out[Odometry]
     global_map: Out[PointCloud2]
 
-    def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._lock = threading.Lock()
+        # Protects _pgo mutations (add_key_pose, search_for_loops,
+        # smooth_and_update, build_global_map) against concurrent access
+        # from _on_scan and _publish_loop threads.
+        self._pgo_lock = threading.Lock()
         self._running = False
         self._thread: threading.Thread | None = None
         self._pgo: _SimplePGO | None = None
@@ -383,13 +391,14 @@ class PGO(Module):
 
     def __getstate__(self) -> dict[str, Any]:
         state: dict[str, Any] = super().__getstate__()  # type: ignore[no-untyped-call]
-        for k in ("_lock", "_thread", "_pgo"):
+        for k in ("_lock", "_pgo_lock", "_thread", "_pgo"):
             state.pop(k, None)
         return state
 
     def __setstate__(self, state: dict[str, Any]) -> None:
         super().__setstate__(state)
         self._lock = threading.Lock()
+        self._pgo_lock = threading.Lock()
         self._thread = None
         self._pgo = None
 
@@ -401,7 +410,7 @@ class PGO(Module):
         self._running = True
         self._thread = threading.Thread(target=self._publish_loop, daemon=True)
         self._thread.start()
-        print("[PGO] Python PGO module started (gtsam iSAM2)")
+        logger.info("PGO module started (gtsam iSAM2)")
 
     @rpc
     def stop(self) -> None:
@@ -411,8 +420,6 @@ class PGO(Module):
         super().stop()
 
     def _on_odom(self, msg: Odometry) -> None:
-        from scipy.spatial.transform import Rotation
-
         q = [
             msg.pose.orientation.x,
             msg.pose.orientation.y,
@@ -449,25 +456,25 @@ class PGO(Module):
         else:
             body_pts = points[:, :3]
 
-        added = pgo.add_key_pose(r_local, t_local, ts, body_pts)
-        if added:
-            pgo.search_for_loops()
-            pgo.smooth_and_update()
-            print(
-                f"[PGO] Keyframe {pgo.num_key_poses} added "
-                f"({t_local[0]:.1f}, {t_local[1]:.1f}, {t_local[2]:.1f})"
-            )
+        with self._pgo_lock:
+            added = pgo.add_key_pose(r_local, t_local, ts, body_pts)
+            if added:
+                pgo.search_for_loops()
+                pgo.smooth_and_update()
+                logger.info(
+                    "Keyframe added",
+                    keyframe=pgo.num_key_poses,
+                    position=f"({t_local[0]:.1f}, {t_local[1]:.1f}, {t_local[2]:.1f})",
+                )
 
-        # Publish corrected odometry
-        r_corr, t_corr = pgo.get_corrected_pose(r_local, t_local)
+            # Publish corrected odometry
+            r_corr, t_corr = pgo.get_corrected_pose(r_local, t_local)
         self._publish_corrected_odom(r_corr, t_corr, ts)
 
     def _publish_corrected_odom(self, r: np.ndarray, t: np.ndarray, ts: float) -> None:
-        from scipy.spatial.transform import Rotation as R
-
         from dimos.msgs.geometry_msgs.Pose import Pose
 
-        q = R.from_matrix(r).as_quat()  # [x,y,z,w]
+        q = Rotation.from_matrix(r).as_quat()  # [x,y,z,w]
 
         odom = Odometry(
             ts=ts,
@@ -492,7 +499,8 @@ class PGO(Module):
             now = time.time()
 
             if now - self._last_global_map_time > interval and pgo.num_key_poses > 0:
-                cloud_np = pgo.build_global_map(self.config.global_map_voxel_size)
+                with self._pgo_lock:
+                    cloud_np = pgo.build_global_map(self.config.global_map_voxel_size)
                 if len(cloud_np) > 0:
                     self.global_map.publish(
                         PointCloud2.from_numpy(cloud_np, frame_id="map", timestamp=now)

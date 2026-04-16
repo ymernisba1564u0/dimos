@@ -16,8 +16,7 @@
 
 `smart_nav(**kwargs)` returns an autoconnected Blueprint containing the core
 SmartNav modules (terrain analysis, local planner, path follower, FAR planner,
-PGO, click-to-goal, cmd-vel mux), with optional TARE exploration and
-GlobalMapUpdater accumulator.
+PGO, click-to-goal, cmd-vel mux), with optional TARE exploration.
 
 `smart_nav_rerun_config(user_config)` returns a Rerun config dict with the
 SmartNav defaults filled in via setdefault — pass it to `RerunBridgeModule`
@@ -41,9 +40,6 @@ logger = logging.getLogger(__name__)
 from dimos.navigation.cmd_vel_mux import CmdVelMux
 from dimos.navigation.smart_nav.modules.click_to_goal.click_to_goal import ClickToGoal
 from dimos.navigation.smart_nav.modules.far_planner.far_planner import FarPlanner
-from dimos.navigation.smart_nav.modules.global_map_updater.global_map_updater import (
-    GlobalMapUpdater,
-)
 from dimos.navigation.smart_nav.modules.local_planner.local_planner import LocalPlanner
 from dimos.navigation.smart_nav.modules.path_follower.path_follower import PathFollower
 from dimos.navigation.smart_nav.modules.pgo.pgo import PGO
@@ -57,7 +53,6 @@ from dimos.protocol.pubsub.impl.lcmpubsub import LCM
 def smart_nav(
     *,
     use_tare: bool = False,
-    use_global_map_updater: bool = False,
     use_terrain_map_ext: bool = True,
     use_simple_planner: bool = False,
     vehicle_height: float | None = None,
@@ -71,7 +66,6 @@ def smart_nav(
     click_to_goal: dict[str, Any] | None = None,
     cmd_vel_mux: dict[str, Any] | None = None,
     tare_planner: dict[str, Any] | None = None,
-    global_map_updater: dict[str, Any] | None = None,
 ) -> Blueprint:
     """Compose a SmartNav autoconnect Blueprint with the given options.
 
@@ -97,15 +91,13 @@ def smart_nav(
         use_tare: Add the TARE frontier-based exploration planner. Auto-remaps
             ClickToGoal's `way_point` output so TARE has exclusive control of
             LocalPlanner's waypoint input.
-        use_global_map_updater: Add the bounded-memory voxel accumulator
-            (GlobalMapUpdater) on top of registered_scan.
         use_terrain_map_ext: Add TerrainMapExt — the persistent extended terrain
             accumulator used for visualization and wider-range planning.
         vehicle_height: Ignore terrain points above this height (m). Threaded
             into TerrainAnalysis's `vehicle_height` config. Defaults to 1.2m.
         terrain_analysis, terrain_map_ext, local_planner, path_follower,
-        far_planner, pgo, click_to_goal, cmd_vel_mux, tare_planner,
-        global_map_updater: Per-module config override dicts. Merged on top
+        far_planner, pgo, click_to_goal, cmd_vel_mux, tare_planner:
+        Per-module config override dicts. Merged on top
         of the SmartNav defaults.
 
     Returns:
@@ -113,8 +105,8 @@ def smart_nav(
     """
     terrain_analysis_config = {**(terrain_analysis or {})}
     local_planner_config = {**(local_planner or {})}
-    terrain_analysis_threshold = terrain_analysis_config.get("obstacle_height_threshold", 0.2)
-    local_planner_threshold = local_planner_config.get("obstacle_height_threshold", 0.2)
+    terrain_analysis_threshold = terrain_analysis_config.get("obstacle_height_threshold", 0.1)
+    local_planner_threshold = local_planner_config.get("obstacle_height_threshold", 0.1)
     if terrain_analysis_threshold < local_planner_threshold:
         logger.warning(
             "terrain_analysis obstacle_height_threshold (%.3f) < "
@@ -225,8 +217,6 @@ def smart_nav(
         )
     if use_tare:
         modules.append(TarePlanner.blueprint(**(tare_planner or {})))
-    if use_global_map_updater:
-        modules.append(GlobalMapUpdater.blueprint(**(global_map_updater or {})))
 
     remappings: list[tuple[type[ModuleBase], str, str | type[ModuleBase] | type[Spec]]] = [
         # PathFollower cmd_vel → CmdVelMux nav input (avoid collision with mux output)

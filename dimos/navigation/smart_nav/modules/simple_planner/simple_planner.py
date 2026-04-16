@@ -37,6 +37,9 @@ import numpy as np
 
 from dimos.core.core import rpc
 from dimos.core.module import Module, ModuleConfig
+from dimos.utils.logging_config import setup_logger
+
+logger = setup_logger()
 from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs.PointStamped import PointStamped
 from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
@@ -246,6 +249,10 @@ class SimplePlannerConfig(ModuleConfig):
     replan_cooldown: float = 2.0
     # Hard cap on A* node expansions per call.
     max_expansions: int = 200_000
+    # Height offset below the robot z-position to estimate ground level (m).
+    # Points below this level are ignored; points above become obstacle
+    # candidates. Should match or slightly exceed the robot's standing height.
+    ground_offset_below_robot: float = 1.3
 
     # ── No-progress detection + escalation ──────────────────────────────
     # Consider the robot "stuck" if its distance-to-goal hasn't decreased
@@ -291,7 +298,7 @@ class SimplePlanner(Module):
     goal_path: Out[Path]
     costmap_cloud: Out[PointCloud2]
 
-    def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._lock = threading.Lock()
         self._running = False
@@ -351,7 +358,7 @@ class SimplePlanner(Module):
         self._running = True
         self._thread = threading.Thread(target=self._planning_loop, daemon=True)
         self._thread.start()
-        print("[simple_planner] Started.")
+        logger.info("SimplePlanner started")
 
     @rpc
     def stop(self) -> None:
@@ -385,11 +392,10 @@ class SimplePlanner(Module):
             self._effective_inflation = self.config.inflation_radius
             self._cached_path = None
             self._last_plan_time = 0.0
-        print(f"[simple_planner] Goal received: ({msg.x:.2f}, {msg.y:.2f}, {msg.z:.2f})")
+        logger.info("Goal received", x=round(msg.x, 2), y=round(msg.y, 2), z=round(msg.z, 2))
 
     # Sensor height assumed for the G1 (m). Points below robot_z minus
     # this offset are interpreted as floor; anything higher is obstacle.
-    _GROUND_OFFSET_BELOW_ROBOT = 1.3
 
     def _classify_points(self, points: np.ndarray, cm: Costmap) -> None:
         """Add points (Nx3) to ``cm`` using z-relative-to-ground as height.
@@ -401,14 +407,28 @@ class SimplePlanner(Module):
         only publishes ground/low-height obstacle voxels, so
         z-relative-to-ground is a good elevation proxy.
         """
+        if len(points) == 0:
+            return
         with self._lock:
             rz = self._robot_z if self._has_odom else 0.0
-        ground_z = rz - self._GROUND_OFFSET_BELOW_ROBOT
-        for p in points:
-            h = float(p[2]) - ground_z
-            if h <= 0.0:
-                continue
-            cm.update(float(p[0]), float(p[1]), h)
+        ground_z = rz - self.config.ground_offset_below_robot
+        heights = points[:, 2] - ground_z
+        mask = heights > 0.0
+        if not np.any(mask):
+            return
+        xs = points[mask, 0]
+        ys = points[mask, 1]
+        hs = heights[mask]
+        cell_size = cm.cell_size
+        ixs = np.floor(xs / cell_size).astype(np.int64)
+        iys = np.floor(ys / cell_size).astype(np.int64)
+        for i in range(len(ixs)):
+            key = (int(ixs[i]), int(iys[i]))
+            h = float(hs[i])
+            prev = cm._heights.get(key, float("-inf"))
+            if h > prev:
+                cm._heights[key] = h
+                cm._blocked_dirty = True
 
     def _fresh_costmap(self) -> Costmap:
         return Costmap(
@@ -458,7 +478,7 @@ class SimplePlanner(Module):
             try:
                 self._replan_once()
             except Exception as exc:  # don't let the planning thread die
-                print(f"[simple_planner] Replan error: {exc}")
+                logger.error("Replan error", exc_info=exc)
             dt = time.monotonic() - t0
             sleep = period - dt
             if sleep > 0:
@@ -483,7 +503,7 @@ class SimplePlanner(Module):
                 wx, wy = cm.cell_to_world(ix, iy)
                 pts[i, 0] = wx
                 pts[i, 1] = wy
-                pts[i, 2] = rz - self._GROUND_OFFSET_BELOW_ROBOT + 0.1
+                pts[i, 2] = rz - self.config.ground_offset_below_robot + 0.1
         self.costmap_cloud.publish(PointCloud2.from_numpy(pts, frame_id="map", timestamp=now))
 
     def _publish_from_cached(self, rx: float, ry: float, gz: float, now: float) -> None:
@@ -547,10 +567,13 @@ class SimplePlanner(Module):
                 if new_inflation < prev:
                     self._effective_inflation = new_inflation
                     self._last_progress_time = mono_now  # arm next tier
-                    print(
-                        f"[simple_planner] stuck {self.config.stuck_seconds:.0f}s "
-                        f"(dist={goal_dist:.2f}m, ref={self._ref_goal_dist:.2f}m) "
-                        f"→ shrinking inflation {prev:.2f}m → {new_inflation:.2f}m"
+                    logger.warning(
+                        "Stuck — shrinking inflation",
+                        stuck_seconds=self.config.stuck_seconds,
+                        goal_dist=round(goal_dist, 2),
+                        ref_dist=round(self._ref_goal_dist, 2),
+                        inflation_from=round(prev, 2),
+                        inflation_to=round(new_inflation, 2),
                     )
                     # Re-arm the progress window at this new tier so a
                     # brief dist-drop doesn't snap us back to default.
@@ -565,9 +588,10 @@ class SimplePlanner(Module):
             # Don't drive the robot into a wall: publish the robot's
             # current position so the local planner stops, and wait
             # for the costmap to refresh before the next attempt.
-            print(
-                f"[simple_planner] A* failed from ({rx:.2f},{ry:.2f}) to "
-                f"({gx:.2f},{gy:.2f}); holding position."
+            logger.warning(
+                "A* failed; holding position",
+                robot=f"({rx:.2f},{ry:.2f})",
+                goal=f"({gx:.2f},{gy:.2f})",
             )
             self.way_point.publish(PointStamped(ts=now, frame_id="map", x=rx, y=ry, z=rz))
             self.goal_path.publish(
@@ -617,11 +641,14 @@ class SimplePlanner(Module):
         if now - self._last_diag_print >= 1.0:
             self._last_diag_print = now
             blocked = len(self._costmap.blocked_cells())
-            print(
-                f"[simple_planner] path={len(path_world)} cells  "
-                f"blocked_cells={blocked}  robot=({rx:.2f},{ry:.2f})  "
-                f"goal=({gx:.2f},{gy:.2f})  waypoint=({wx:.2f},{wy:.2f})  "
-                f"inflation={effective_inflation:.2f}m"
+            logger.info(
+                "Replan",
+                path_cells=len(path_world),
+                blocked_cells=blocked,
+                robot=f"({rx:.2f},{ry:.2f})",
+                goal=f"({gx:.2f},{gy:.2f})",
+                waypoint=f"({wx:.2f},{wy:.2f})",
+                inflation=round(effective_inflation, 2),
             )
 
     def plan(

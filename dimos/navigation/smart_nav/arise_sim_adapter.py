@@ -38,6 +38,9 @@ from dimos.msgs.geometry_msgs.Vector3 import Vector3
 from dimos.msgs.nav_msgs.Odometry import Odometry
 from dimos.msgs.sensor_msgs.Imu import Imu
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
+from dimos.utils.logging_config import setup_logger
+
+logger = setup_logger()
 
 
 class AriseSimAdapterConfig(ModuleConfig):
@@ -89,7 +92,7 @@ class AriseSimAdapter(Module):
         self._running = True
         self._thread = threading.Thread(target=self._imu_loop, daemon=True)
         self._thread.start()
-        print("[AriseSimAdapter] Started — converting sim data for AriseSLAM")
+        logger.info("AriseSimAdapter started — converting sim data for AriseSLAM")
 
     @rpc
     def stop(self) -> None:
@@ -121,9 +124,7 @@ class AriseSimAdapter(Module):
             body_cloud.frame_id = "sensor"
             self.raw_points.publish(body_cloud)
         except Exception:
-            import traceback
-
-            print(f"[AriseSimAdapter] scan transform failed: {traceback.format_exc()}")
+            logger.exception("AriseSimAdapter scan transform failed")
 
     def _imu_loop(self) -> None:
         """Publish synthetic IMU at high rate from latest odom."""
