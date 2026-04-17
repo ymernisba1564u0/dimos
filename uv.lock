@@ -1729,7 +1729,6 @@ agents = [
     { name = "langchain-text-splitters" },
     { name = "ollama" },
     { name = "openai" },
-    { name = "openai-whisper" },
     { name = "sounddevice" },
 ]
 base = [
@@ -1753,7 +1752,6 @@ base = [
     { name = "ollama" },
     { name = "omegaconf" },
     { name = "openai" },
-    { name = "openai-whisper" },
     { name = "pillow" },
     { name = "playground" },
     { name = "pygame" },
@@ -1959,7 +1957,6 @@ unitree = [
     { name = "ollama" },
     { name = "omegaconf" },
     { name = "openai" },
-    { name = "openai-whisper" },
     { name = "pillow" },
     { name = "playground" },
     { name = "pygame" },
@@ -1983,6 +1980,21 @@ web = [
     { name = "sse-starlette" },
     { name = "uvicorn" },
 ]
+whisper = [
+    { name = "anthropic" },
+    { name = "bitsandbytes", marker = "sys_platform == 'linux'" },
+    { name = "langchain" },
+    { name = "langchain-chroma" },
+    { name = "langchain-core" },
+    { name = "langchain-huggingface" },
+    { name = "langchain-ollama" },
+    { name = "langchain-openai" },
+    { name = "langchain-text-splitters" },
+    { name = "ollama" },
+    { name = "openai" },
+    { name = "openai-whisper" },
+    { name = "sounddevice" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1997,6 +2009,7 @@ requires-dist = [
     { name = "ctransformers", extras = ["cuda"], marker = "extra == 'cuda'", specifier = "==0.2.27" },
     { name = "cupy-cuda12x", marker = "platform_machine == 'x86_64' and extra == 'cuda'", specifier = "==13.6.0" },
     { name = "cyclonedds", marker = "extra == 'dds'", specifier = ">=0.10.5" },
+    { name = "dimos", extras = ["agents"], marker = "extra == 'whisper'" },
     { name = "dimos", extras = ["agents", "web", "perception", "visualization", "sim"], marker = "extra == 'base'" },
     { name = "dimos", extras = ["base"], marker = "extra == 'unitree'" },
     { name = "dimos", extras = ["dev"], marker = "extra == 'dds'" },
@@ -2051,7 +2064,7 @@ requires-dist = [
     { name = "open3d-unofficial-arm", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
     { name = "open3d-unofficial-arm", marker = "platform_machine == 'aarch64' and sys_platform == 'linux' and extra == 'docker'" },
     { name = "openai", marker = "extra == 'agents'" },
-    { name = "openai-whisper", marker = "extra == 'agents'" },
+    { name = "openai-whisper", marker = "extra == 'whisper'" },
     { name = "opencv-contrib-python", marker = "extra == 'misc'", specifier = "==4.10.0.84" },
     { name = "opencv-python" },
     { name = "opencv-python-headless", marker = "extra == 'docker'" },
@@ -2152,7 +2165,7 @@ requires-dist = [
     { name = "xformers", marker = "platform_machine == 'x86_64' and extra == 'cuda'", specifier = ">=0.0.20" },
     { name = "yapf", marker = "extra == 'misc'", specifier = "==0.40.2" },
 ]
-provides-extras = ["misc", "visualization", "agents", "web", "perception", "unitree", "manipulation", "cpu", "cuda", "dev", "psql", "sim", "drone", "dds", "docker", "base"]
+provides-extras = ["misc", "visualization", "agents", "whisper", "web", "perception", "unitree", "manipulation", "cpu", "cuda", "dev", "psql", "sim", "drone", "dds", "docker", "base"]
 
 [[package]]
 name = "dimos-lcm"

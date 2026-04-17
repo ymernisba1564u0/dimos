@@ -169,8 +169,12 @@ agents = [
 
     # Audio
     "openai",
-    "openai-whisper",
     "sounddevice",
+]
+
+whisper = [
+    "dimos[agents]",
+    "openai-whisper",
 ]
 
 web = [
