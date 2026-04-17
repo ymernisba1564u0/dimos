@@ -15,8 +15,8 @@
 
 """Twitch Plays Go2 with odom-based turn feedback.
 
-Chat votes on categories: ``forward`` / ``back`` / ``turn`` (plurality over a
-5-second window).
+Chat votes on categories: ``forward`` / ``back`` / ``turn`` / ``jump`` / ``sit``
+(plurality over a 5-second window).
 
 - forward/back → drive at 0.3 m/s for 1 second
 - turn → parse ``turn [left|right] <degrees>`` from each turn vote, average the
@@ -50,6 +50,8 @@ import threading
 import time
 from typing import Any
 
+from unitree_webrtc_connect.constants import RTC_TOPIC, SPORT_CMD
+
 from dimos.core.coordination.blueprints import autoconnect
 from dimos.core.coordination.module_coordinator import ModuleCoordinator
 from dimos.core.core import rpc
@@ -58,6 +60,7 @@ from dimos.core.stream import In, Out
 from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.geometry_msgs.Twist import Twist
 from dimos.robot.unitree.go2.blueprints.basic.unitree_go2_basic import unitree_go2_basic
+from dimos.robot.unitree.go2.connection_spec import GO2ConnectionSpec
 from dimos.stream.twitch.module import TwitchChat, TwitchMessage
 from dimos.utils.logging_config import setup_logger
 
@@ -105,7 +108,7 @@ def _match_direction(word: str) -> str | None:
 
 
 def _categorize(content: str) -> str | None:
-    """Return 'forward' | 'back' | 'turn' | None based on exact keyword match."""
+    """Return 'forward' | 'back' | 'turn' | 'jump' | 'sit' | None."""
     words = set(re.findall(r"[a-zA-Z]+", content.lower()))
     if "turn" in words:
         return "turn"
@@ -113,6 +116,10 @@ def _categorize(content: str) -> str | None:
         return "forward"
     if words & {"back", "backward", "backwards"}:
         return "back"
+    if words & {"jump", "hop", "leap"}:
+        return "jump"
+    if words & {"sit", "sitdown"}:
+        return "sit"
     return None
 
 
@@ -173,6 +180,8 @@ class TwitchPlaysGo2(Module):
     odom: In[PoseStamped]
     cmd_vel: Out[Twist]
 
+    _connection: GO2ConnectionSpec
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._lock = threading.Lock()
@@ -229,6 +238,18 @@ class TwitchPlaysGo2(Module):
                 self._drive_linear(-LINEAR_SPEED)
             elif winner == "turn":
                 self._do_turn([a for c, a in votes if c == "turn" and a is not None])
+            elif winner == "jump":
+                self._do_sport_command("FrontJump")
+            elif winner == "sit":
+                self._do_sport_command("Sit")
+
+    def _do_sport_command(self, command_name: str) -> None:
+        api_id = SPORT_CMD[command_name]
+        logger.info("[TwitchPlaysGo2] Sport command: %s (api_id=%d)", command_name, api_id)
+        try:
+            self._connection.publish_request(RTC_TOPIC["SPORT_MOD"], {"api_id": api_id})
+        except Exception:
+            logger.exception("[TwitchPlaysGo2] Failed to execute %s", command_name)
 
     def _drive_linear(self, linear_x: float) -> None:
         t = Twist()
