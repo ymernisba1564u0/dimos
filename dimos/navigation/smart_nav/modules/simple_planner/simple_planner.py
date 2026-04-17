@@ -266,6 +266,11 @@ class SimplePlannerConfig(ModuleConfig):
     # out at ``stuck_min_inflation``.
     stuck_shrink_factor: float = 0.5
     stuck_min_inflation: float = 0.2
+    # When the robot is within this distance (m) of the current
+    # intermediate waypoint, proactively advance the waypoint along the
+    # cached path so the local planner never stops on it. Should be
+    # larger than LocalPlanner's goal_reached_threshold.
+    waypoint_advance_radius: float = 1.0
 
 
 class SimplePlanner(Module):
@@ -332,6 +337,10 @@ class SimplePlanner(Module):
         self._last_plan_time = 0.0
         # Costmap_cloud publish throttle — 2 Hz is plenty for rerun.
         self._last_costmap_pub = 0.0
+        # Currently published waypoint — tracked so the odom callback can
+        # detect when the robot is about to reach it and advance early.
+        self._current_wp: tuple[float, float] | None = None
+        self._current_wp_is_goal = False
 
     def __getstate__(self) -> dict[str, Any]:
         state: dict[str, Any] = super().__getstate__()  # type: ignore[no-untyped-call]
@@ -376,6 +385,37 @@ class SimplePlanner(Module):
             self._robot_y = float(msg.pose.position.y)
             self._robot_z = float(msg.pose.position.z)
             self._has_odom = True
+            # Snapshot what we need for the advance check while holding
+            # the lock, so the actual publish (which may block briefly on
+            # the transport) happens outside.
+            wp = self._current_wp
+            is_goal = self._current_wp_is_goal
+            cached = self._cached_path
+            rx, ry = self._robot_x, self._robot_y
+            gz = self._goal_z
+
+        # Fast check: if the robot is approaching the current intermediate
+        # waypoint, advance it along the cached path so the local planner
+        # doesn't decelerate and stop on it.
+        if wp is None or is_goal or cached is None:
+            return
+        dist_sq = (wp[0] - rx) ** 2 + (wp[1] - ry) ** 2
+        threshold_sq = self.config.waypoint_advance_radius**2
+        if dist_sq > threshold_sq:
+            return
+        # Robot is close to the intermediate waypoint — push it forward.
+        # Use a slightly larger lookahead so the new point is clearly
+        # ahead and the local planner keeps moving.
+        extended_lookahead = self.config.lookahead_distance * 1.5
+        wx, wy = self._lookahead(cached, rx, ry, extended_lookahead)
+        # Check whether this new waypoint is the final goal.
+        last = cached[-1]
+        new_is_goal = (wx, wy) == last
+        with self._lock:
+            self._current_wp = (wx, wy)
+            self._current_wp_is_goal = new_is_goal
+        now = time.time()
+        self.way_point.publish(PointStamped(ts=now, frame_id="map", x=wx, y=wy, z=gz))
 
     def _on_goal(self, msg: PointStamped) -> None:
         # NaN sentinel = cancel navigation (e.g. teleop took over).
@@ -387,6 +427,8 @@ class SimplePlanner(Module):
                 rx, ry, rz = self._robot_x, self._robot_y, self._robot_z
             # Publish robot position as waypoint so LocalPlanner stops
             # tracking the stale waypoint.
+            self._current_wp = None
+            self._current_wp_is_goal = False
             now = time.time()
             self.way_point.publish(PointStamped(ts=now, frame_id="map", x=rx, y=ry, z=rz))
             self.goal_path.publish(Path(ts=now, frame_id="map", poses=[]))
@@ -543,6 +585,11 @@ class SimplePlanner(Module):
         if not cached:
             return
         wx, wy = self._lookahead(cached, rx, ry, self.config.lookahead_distance)
+        last = cached[-1]
+        is_goal = (wx, wy) == last
+        with self._lock:
+            self._current_wp = (wx, wy)
+            self._current_wp_is_goal = is_goal
         self.way_point.publish(PointStamped(ts=now, frame_id="map", x=wx, y=wy, z=gz))
 
     def _replan_once(self) -> None:
@@ -617,6 +664,9 @@ class SimplePlanner(Module):
                 robot=f"({rx:.2f},{ry:.2f})",
                 goal=f"({gx:.2f},{gy:.2f})",
             )
+            with self._lock:
+                self._current_wp = None
+                self._current_wp_is_goal = False
             self.way_point.publish(PointStamped(ts=now, frame_id="map", x=rx, y=ry, z=rz))
             self.goal_path.publish(
                 Path(
@@ -659,6 +709,11 @@ class SimplePlanner(Module):
 
         # Pick look-ahead waypoint
         wx, wy = self._lookahead(path_world, rx, ry, self.config.lookahead_distance)
+        last = path_world[-1]
+        is_goal = (wx, wy) == last
+        with self._lock:
+            self._current_wp = (wx, wy)
+            self._current_wp_is_goal = is_goal
         self.way_point.publish(PointStamped(ts=now, frame_id="map", x=wx, y=wy, z=gz))
 
         # 1 Hz diagnostic: cells in costmap, path length, chosen waypoint
