@@ -86,6 +86,9 @@ def _go2_rerun_blueprint() -> Any:
                 line_grid=rrb.LineGrid3D(
                     plane=rr.components.Plane3D.XY.with_distance(0.5),
                 ),
+                overrides={
+                    "world/lidar": rrb.EntityBehavior(visible=False),
+                },
             ),
             column_shares=[1, 2],
         ),
