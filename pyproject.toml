@@ -73,7 +73,8 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 log_cli = true
-log_cli_level = "INFO"
+# bumped up to DEBUG locally so I can see agent step-by-step output while experimenting
+log_cli_level = "DEBUG"
 
 [tool.coverage.run]
 source = ["src/dimos"]
