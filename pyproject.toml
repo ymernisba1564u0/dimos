@@ -75,6 +75,8 @@ asyncio_mode = "auto"
 log_cli = true
 # bumped up to DEBUG locally so I can see agent step-by-step output while experimenting
 log_cli_level = "DEBUG"
+# only show a summary line per test by default; use -v to get full names
+addopts = "-q"
 
 [tool.coverage.run]
 source = ["src/dimos"]
