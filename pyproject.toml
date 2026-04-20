@@ -76,8 +76,13 @@ log_cli = true
 # bumped up to DEBUG locally so I can see agent step-by-step output while experimenting
 log_cli_level = "DEBUG"
 # -v for full test names; -s to see print() output from tests (useful when debugging agents)
-addopts = "-v -s"
+# removed --tb=short here so I get full tracebacks — easier to trace agent failures
+addopts = "-v -s --tb=long"
 
 [tool.coverage.run]
 source = ["src/dimos"]
 omit = ["tests/*"]
+
+[tool.coverage.report]
+# show lines that weren't covered so I know what to test next
+show_missing = true
