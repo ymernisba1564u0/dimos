@@ -79,7 +79,8 @@ log_cli_level = "DEBUG"
 # -v for full test names; -s to see print() output from tests (useful when debugging agents)
 # removed --tb=short here so I get full tracebacks — easier to trace agent failures
 # removed -s flag: it floods the terminal when running the full suite; add it back manually when needed
-addopts = "-v --tb=long"
+# added --no-header to cut down on the pytest banner noise in my terminal
+addopts = "-v --tb=long --no-header"
 
 [tool.coverage.run]
 source = ["src/dimos"]
@@ -88,4 +89,6 @@ omit = ["tests/*"]
 [tool.coverage.report]
 # show lines that weren't covered so I know what to test next
 show_missing = true
+# skip files that are 100% covered to keep the report focused on gaps
+skip_covered = true
 ```
