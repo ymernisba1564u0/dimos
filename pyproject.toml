@@ -91,4 +91,6 @@ omit = ["tests/*"]
 show_missing = true
 # skip files that are 100% covered to keep the report focused on gaps
 skip_covered = true
+# I find anything below 70% worth flagging as a reminder to write more tests
+fail_under = 70
 ```
