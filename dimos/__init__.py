@@ -2,6 +2,10 @@
 
 A framework for building dimensional, reactive, and composable
 robotics and agent systems with RxPY-based pipelines.
+
+Personal fork notes:
+    - Forked for learning RxPY-based robotics pipelines
+    - Upstream: https://github.com/dimensionalOS/dimos
 """
 
 from importlib.metadata import PackageNotFoundError, version
