@@ -80,7 +80,8 @@ log_cli_level = "DEBUG"
 # removed --tb=short here so I get full tracebacks — easier to trace agent failures
 # removed -s flag: it floods the terminal when running the full suite; add it back manually when needed
 # added --no-header to cut down on the pytest banner noise in my terminal
-addopts = "-v --tb=long --no-header"
+# added -x to stop on first failure — saves time when iterating on a broken test
+addopts = "-v --tb=long --no-header -x"
 
 [tool.coverage.run]
 source = ["src/dimos"]
